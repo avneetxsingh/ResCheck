@@ -127,7 +127,16 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
           </h3>
           <div className="flex flex-wrap gap-2">
             {skillsGap.bonus_skills.map((skill, i) => {
-              const name = typeof skill === "string" ? skill : (skill as { name?: string }).name ?? String(skill);
+              let name: string;
+              if (typeof skill === "string") {
+                name = skill;
+              } else if (skill && typeof skill === "object") {
+                const obj = skill as Record<string, unknown>;
+                name = typeof obj.name === "string" ? obj.name : JSON.stringify(obj);
+              } else {
+                name = String(skill);
+              }
+              if (!name.trim()) return null;
               return (
                 <span
                   key={`${name}-${i}`}

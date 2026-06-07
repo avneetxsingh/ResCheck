@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useHistory } from "./useHistory";
 import { useSettings } from "./useSettings";
 import type { AnalysisResult, RawAnalysisResult, LineError } from "@/types/analysis";
@@ -14,11 +14,32 @@ export type AnalysisStage =
   | "complete"
   | "error";
 
+function generateId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `err-${crypto.randomUUID()}`;
+  }
+  // Fallback for environments without crypto.randomUUID
+  return `err-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isRawAnalysisResult(v: unknown): v is RawAnalysisResult {
+  return (
+    v !== null &&
+    typeof v === "object" &&
+    "scorecard" in v &&
+    "errors" in v &&
+    Array.isArray((v as RawAnalysisResult).errors) &&
+    "summary" in v &&
+    "skills_gap" in v &&
+    "formatting_audit" in v &&
+    "metadata" in v
+  );
+}
+
 function enrichResult(raw: RawAnalysisResult): AnalysisResult {
-  let errorIndex = 0;
   const errors: LineError[] = raw.errors.map((e) => ({
     ...e,
-    id: `err-${Date.now()}-${errorIndex++}`,
+    id: generateId(),
   }));
   return {
     ...raw,
@@ -38,12 +59,39 @@ export function useAnalysis(apiKey: string) {
   const { addEntry } = useHistory();
   const { settings } = useSettings();
 
+  // Refs so we can clean up across renders without stale closures
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Monotonic counter — each analyze() call gets its own snapshot; stale completions are discarded
+  const callCountRef = useRef(0);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+      if (progressTimerRef.current !== null) {
+        clearInterval(progressTimerRef.current);
+      }
+    };
+  }, []);
+
   const analyze = useCallback(
     async (file: File, jobDescription: string) => {
       if (!apiKey) {
         setError("Please enter your Groq API key first.");
         return;
       }
+
+      // Cancel any in-flight request from a previous call
+      abortControllerRef.current?.abort();
+      if (progressTimerRef.current !== null) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const thisCall = ++callCountRef.current;
 
       setStage("parsing");
       setProgress(5);
@@ -59,8 +107,10 @@ export function useAnalysis(apiKey: string) {
         const parseRes = await fetch("/api/parse-pdf", {
           method: "POST",
           body: formData,
+          signal: controller.signal,
         });
 
+        if (thisCall !== callCountRef.current) return; // superseded by newer call
         setProgress(30);
 
         if (!parseRes.ok) {
@@ -74,8 +124,7 @@ export function useAnalysis(apiKey: string) {
         setStage("analyzing");
         setProgress(40);
 
-        // Simulate progress while waiting for Groq
-        const progressTimer = setInterval(() => {
+        progressTimerRef.current = setInterval(() => {
           setProgress((p) => (p < 85 ? p + 2 : p));
         }, 400);
 
@@ -91,9 +140,15 @@ export function useAnalysis(apiKey: string) {
             model: settings.model,
             system_prompt: settings.systemPrompt,
           }),
+          signal: controller.signal,
         });
 
-        clearInterval(progressTimer);
+        if (progressTimerRef.current !== null) {
+          clearInterval(progressTimerRef.current);
+          progressTimerRef.current = null;
+        }
+
+        if (thisCall !== callCountRef.current) return; // superseded
         setProgress(90);
 
         if (!analyzeRes.ok) {
@@ -101,14 +156,23 @@ export function useAnalysis(apiKey: string) {
           throw new Error(err.error);
         }
 
-        const { result: rawResult } = await analyzeRes.json();
+        const responseBody = await analyzeRes.json();
+        const rawResult: unknown = responseBody?.result;
+
+        if (!isRawAnalysisResult(rawResult)) {
+          throw new Error(
+            "Received an unexpected response shape from the server. Please try again."
+          );
+        }
+
         const enriched = enrichResult(rawResult);
+
+        if (thisCall !== callCountRef.current) return; // superseded
 
         setProgress(100);
         setResult(enriched);
         setStage("complete");
 
-        // Save to history
         const entry: HistoryEntry = {
           id: `analysis-${Date.now()}`,
           created_at: enriched.metadata.analyzed_at,
@@ -118,15 +182,26 @@ export function useAnalysis(apiKey: string) {
         };
         addEntry(entry);
       } catch (err) {
+        // AbortError = intentional cancel (new analysis started or component unmounted)
+        if (err instanceof Error && err.name === "AbortError") return;
+        if (thisCall !== callCountRef.current) return; // stale error from old call
+
         setStage("error");
         setProgress(0);
-        setError(err instanceof Error ? err.message : "An unexpected error occurred.");
+        setError(
+          err instanceof Error ? err.message : "An unexpected error occurred."
+        );
       }
     },
-    [apiKey, addEntry]
+    [apiKey, addEntry, settings.model, settings.systemPrompt]
   );
 
   const reset = useCallback(() => {
+    abortControllerRef.current?.abort();
+    if (progressTimerRef.current !== null) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
     setStage("idle");
     setProgress(0);
     setResult(null);

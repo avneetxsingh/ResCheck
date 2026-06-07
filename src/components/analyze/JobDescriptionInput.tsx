@@ -27,9 +27,14 @@ export function JobDescriptionInput({ value, onChange }: JobDescriptionInputProp
       />
       <p className="text-xs text-muted-foreground text-right">
         {wordCount} words · {charCount} chars
-        {wordCount < 50 && wordCount > 0 && (
+        {wordCount > 0 && wordCount < 30 && (
           <span className="text-amber-500 ml-2">
-            — more detail = better analysis
+            — sparse JD: resume audit still runs, keyword match will be limited
+          </span>
+        )}
+        {wordCount >= 30 && wordCount < 80 && (
+          <span className="text-amber-500 ml-2">
+            — moderate JD: more detail improves skill matching
           </span>
         )}
       </p>

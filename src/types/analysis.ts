@@ -10,7 +10,12 @@ export type ErrorType =
   | "formatting"
   | "ats_unfriendly"
   | "redundancy"
-  | "tense_inconsistency";
+  | "tense_inconsistency"
+  | "extra_whitespace"
+  | "inconsistent_bold"
+  | "inconsistent_bullets"
+  | "date_format"
+  | "capitalization_inconsistency";
 
 export type ResumeSection =
   | "contact"
@@ -70,16 +75,28 @@ export interface ExecutiveSummary {
   tailoring_advice: string;
 }
 
+export interface FormattingAudit {
+  whitespace_issues: string[];       // e.g. "Double space after period on line: 'Led a team  of 5'"
+  bold_inconsistencies: string[];    // e.g. "Google is bold but Microsoft is not"
+  bullet_inconsistencies: string[];  // e.g. "Most bullets start with '•' but one uses '-'"
+  date_format_issues: string[];      // e.g. "Jan 2023 vs January 2023 vs 2023-01"
+  capitalization_issues: string[];   // e.g. "Section header 'experience' should be 'Experience'"
+  other_inconsistencies: string[];   // catch-all for anything else
+  is_clean: boolean;                 // true only if ALL arrays are empty
+}
+
 export interface AnalysisResult {
   scorecard: Scorecard;
   skills_gap: SkillsGapAnalysis;
   errors: LineError[];
+  formatting_audit?: FormattingAudit; // optional — absent in pre-existing history entries
   summary: ExecutiveSummary;
   metadata: {
     model: string;
     analyzed_at: string; // ISO timestamp (added client-side)
     resume_word_count: number;
     jd_word_count: number;
+    jd_quality?: "rich" | "moderate" | "sparse"; // optional — absent in pre-existing history entries
     total_errors_found: number;
   };
 }
@@ -89,6 +106,7 @@ export interface RawAnalysisResult {
   scorecard: Scorecard;
   skills_gap: SkillsGapAnalysis;
   errors: Omit<LineError, "id">[];
+  formatting_audit: FormattingAudit;
   summary: ExecutiveSummary;
   metadata: Omit<AnalysisResult["metadata"], "analyzed_at">;
 }

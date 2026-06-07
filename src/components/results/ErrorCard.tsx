@@ -37,6 +37,11 @@ const ERROR_TYPE_LABELS: Record<string, string> = {
   ats_unfriendly: "ATS Unfriendly",
   redundancy: "Redundancy",
   tense_inconsistency: "Tense Issue",
+  extra_whitespace: "Extra Space",
+  inconsistent_bold: "Bold Inconsistency",
+  inconsistent_bullets: "Bullet Inconsistency",
+  date_format: "Date Format",
+  capitalization_inconsistency: "Capitalization",
 };
 
 export function ErrorCard({ error }: ErrorCardProps) {

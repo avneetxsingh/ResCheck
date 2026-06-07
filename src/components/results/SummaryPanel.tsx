@@ -18,7 +18,7 @@ const VERDICT_BANNER = {
 };
 
 export function SummaryPanel({ summary, metadata }: SummaryPanelProps) {
-  const banner = VERDICT_BANNER[summary.verdict];
+  const banner = VERDICT_BANNER[summary.verdict] ?? VERDICT_BANNER["moderate"];
 
   return (
     <div className="space-y-4">
@@ -46,7 +46,7 @@ export function SummaryPanel({ summary, metadata }: SummaryPanelProps) {
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
-              {summary.top_strengths.map((s, i) => (
+              {(summary.top_strengths ?? []).slice(0, 3).map((s, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm">
                   <span className="w-5 h-5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                     {i + 1}
@@ -68,7 +68,7 @@ export function SummaryPanel({ summary, metadata }: SummaryPanelProps) {
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
-              {summary.top_improvements.map((s, i) => (
+              {(summary.top_improvements ?? []).slice(0, 3).map((s, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm">
                   <span className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                     {i + 1}

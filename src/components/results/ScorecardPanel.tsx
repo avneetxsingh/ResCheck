@@ -45,7 +45,7 @@ function progressColor(score: number) {
 }
 
 export function ScorecardPanel({ scorecard, verdict }: ScorecardPanelProps) {
-  const verdictConfig = VERDICT_CONFIG[verdict];
+  const verdictConfig = VERDICT_CONFIG[verdict] ?? VERDICT_CONFIG["moderate"];
 
   return (
     <div className="space-y-6">
@@ -73,6 +73,7 @@ export function ScorecardPanel({ scorecard, verdict }: ScorecardPanelProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {METRICS.map((key) => {
           const metric = scorecard[key];
+          if (!metric) return null;
           return (
             <Card key={key} className="overflow-hidden">
               <CardContent className="p-4 space-y-3">

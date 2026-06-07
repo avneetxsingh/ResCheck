@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { diffWords } from "diff";
 import { cn } from "@/lib/utils";
 
@@ -9,7 +10,7 @@ interface DiffViewProps {
 }
 
 export function DiffView({ original, fixed }: DiffViewProps) {
-  const changes = diffWords(original, fixed);
+  const changes = useMemo(() => diffWords(original, fixed), [original, fixed]);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">

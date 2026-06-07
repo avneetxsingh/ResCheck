@@ -23,20 +23,22 @@ function scoreColor(score: number) {
 }
 
 export function ScoreRing({ score, size = "md", label, animate = true }: ScoreRingProps) {
-  const [displayed, setDisplayed] = useState(animate ? 0 : score);
+  // Clamp to valid range before any calculation — guards against AI returning out-of-bounds scores
+  const clampedScore = Math.min(100, Math.max(0, score));
+  const [displayed, setDisplayed] = useState(animate ? 0 : clampedScore);
   const { svg, r, stroke, fontSize, labelSize } = SIZE_MAP[size];
 
   useEffect(() => {
     if (!animate) return;
     let current = 0;
-    const step = Math.ceil(score / 40);
+    const step = Math.ceil(clampedScore / 40);
     const timer = setInterval(() => {
-      current = Math.min(current + step, score);
+      current = Math.min(current + step, clampedScore);
       setDisplayed(current);
-      if (current >= score) clearInterval(timer);
+      if (current >= clampedScore) clearInterval(timer);
     }, 30);
     return () => clearInterval(timer);
-  }, [score, animate]);
+  }, [clampedScore, animate]);
 
   const circumference = 2 * Math.PI * r;
   const dash = (displayed / 100) * circumference;

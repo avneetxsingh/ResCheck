@@ -14,3 +14,6 @@ export const GROQ_MODELS = [
   { id: "gemma2-9b-it", label: "Gemma 2 9B", note: "Balanced" },
   { id: "mixtral-8x7b-32768", label: "Mixtral 8x7B", note: "Long context" },
 ];
+
+// Authoritative allowlist — validated in the API route before calling Groq
+export const ALLOWED_MODELS = new Set(GROQ_MODELS.map((m) => m.id));

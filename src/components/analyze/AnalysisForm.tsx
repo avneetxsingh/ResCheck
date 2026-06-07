@@ -34,7 +34,7 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
 
   const isRunning = stage === "parsing" || stage === "analyzing";
   const hasKey = settings.apiKey.length > 10;
-  const canSubmit = hasKey && file !== null && jobDescription.trim().length > 50 && !isRunning;
+  const canSubmit = hasKey && file !== null && jobDescription.trim().length > 0 && !isRunning;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +113,7 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
             ? "Add your Groq API key in Settings to get started"
             : !file
             ? "Upload your resume PDF"
-            : "Add a job description (at least 50 characters)"}
+            : "Add a job description"}
         </p>
       )}
     </form>
