@@ -102,13 +102,27 @@ export function FormattingAuditPanel({ audit }: FormattingAuditPanelProps) {
                   {clean ? (
                     <p className="text-xs text-muted-foreground">{description}</p>
                   ) : (
-                    <ul className="space-y-1">
-                      {items.map((item, i) => (
-                        <li key={i} className="text-sm text-foreground flex gap-2">
-                          <Minus className="w-3 h-3 mt-0.5 text-amber-500 shrink-0" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
+                    <ul className="space-y-1.5">
+                      {items.map((item, i) => {
+                        // Highlight text inside single quotes as inline code
+                        const parts = item.split(/('(?:[^'\\]|\\.)*')/g);
+                        return (
+                          <li key={i} className="text-sm text-foreground flex gap-2">
+                            <Minus className="w-3 h-3 mt-0.5 text-amber-500 shrink-0" />
+                            <span>
+                              {parts.map((part, j) =>
+                                part.startsWith("'") && part.endsWith("'") ? (
+                                  <code key={j} className="text-xs bg-muted px-1 py-0.5 rounded font-mono break-all">
+                                    {part.slice(1, -1)}
+                                  </code>
+                                ) : (
+                                  part
+                                )
+                              )}
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>

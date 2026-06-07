@@ -37,22 +37,32 @@ const SkillSchema = z.object({
   match_strength: z.enum(["exact", "partial", "missing"]),
 });
 
+const ERROR_TYPES = [
+  "grammar", "spelling", "punctuation", "weak_verb", "passive_voice",
+  "quantification_missing", "vague_language", "keyword_missing", "formatting",
+  "ats_unfriendly", "redundancy", "tense_inconsistency", "extra_whitespace",
+  "inconsistent_bold", "inconsistent_bullets", "date_format",
+  "capitalization_inconsistency",
+] as const;
+
+const RESUME_SECTIONS = [
+  "contact", "summary", "experience", "education",
+  "skills", "projects", "certifications", "other",
+] as const;
+
 const LineErrorSchema = z.object({
   original_line: z.string(),
   fixed_line: z.string(),
-  error_type: z.enum([
-    "grammar", "spelling", "punctuation", "weak_verb", "passive_voice",
-    "quantification_missing", "vague_language", "keyword_missing", "formatting",
-    "ats_unfriendly", "redundancy", "tense_inconsistency", "extra_whitespace",
-    "inconsistent_bold", "inconsistent_bullets", "date_format",
-    "capitalization_inconsistency",
-  ]),
+  error_type: z.string()
+    .transform((s) => s.toLowerCase().replace(/[\s\-]+/g, "_"))
+    .pipe(z.enum(ERROR_TYPES))
+    .catch("formatting"),
   reason: z.string(),
-  section: z.enum([
-    "contact", "summary", "experience", "education",
-    "skills", "projects", "certifications", "other",
-  ]),
-  severity: z.enum(["critical", "moderate", "minor"]),
+  section: z.string()
+    .transform((s) => s.toLowerCase())
+    .pipe(z.enum(RESUME_SECTIONS))
+    .catch("other"),
+  severity: z.enum(["critical", "moderate", "minor"]).catch("minor"),
 });
 
 const FormattingAuditSchema = z.object({
@@ -128,7 +138,7 @@ async function callGroq(
     ],
     response_format: { type: "json_object" },
     temperature: 0.1,
-    max_tokens: 4096,
+    max_tokens: 2000,
   });
   const rawText = completion.choices[0]?.message?.content ?? "";
   const actualModel = completion.model ?? model;
@@ -226,10 +236,22 @@ export async function POST(req: NextRequest) {
   try {
     const groq = createGroqClient(apiKey.trim());
     const model = body.model ?? GROQ_MODEL;
-    const systemPrompt = body.system_prompt ?? SYSTEM_PROMPT;
+    // If a custom system prompt is provided but exceeds the safe char limit,
+    // fall back to the default. The old long prompt stored in localStorage was
+    // ~16000 chars which alone exceeds the free-tier TPM limit.
+    const MAX_SYSTEM_PROMPT_CHARS = 6000;
+    const systemPrompt =
+      body.system_prompt && body.system_prompt.length <= MAX_SYSTEM_PROMPT_CHARS
+        ? body.system_prompt
+        : SYSTEM_PROMPT;
+
+    // Truncate inputs to stay within the free-tier TPM limit (~6000 input tokens).
+    // System prompt ≈ 1800 tokens, leaving ~4200 tokens for resume + JD.
+    const resumeText = body.resume_text.slice(0, 12000); // ~3000 tokens
+    const jdText = body.job_description.slice(0, 4000);  // ~1000 tokens
 
     const outcome = await parseAndValidate(
-      groq, model, systemPrompt, body.resume_text, body.job_description
+      groq, model, systemPrompt, resumeText, jdText
     );
 
     if ("error" in outcome) {
@@ -241,11 +263,31 @@ export async function POST(req: NextRequest) {
 
     const { result, actualModel } = outcome;
 
-    // Server-side corrections (belt-and-suspenders — these are always authoritative)
-    result.metadata.model = actualModel;                          // actual model Groq used
-    result.metadata.total_errors_found = result.errors.length;   // exact count, not AI estimate
-    result.formatting_audit.is_clean = AUDIT_KEYS.every(        // recompute from actual arrays
+    // Server-side corrections — always authoritative, never trust AI's values
+    result.metadata.model = actualModel;
+    result.metadata.total_errors_found = result.errors.length;
+
+    // Recompute is_clean from actual arrays
+    result.formatting_audit.is_clean = AUDIT_KEYS.every(
       (k) => result.formatting_audit[k].length === 0
+    );
+
+    // Recompute formatting_score from actual audit issue count (AI always gets this wrong)
+    const auditCount = AUDIT_KEYS.reduce((n, k) => n + result.formatting_audit[k].length, 0);
+    result.scorecard.formatting_score.score =
+      auditCount === 0 ? 95 :
+      auditCount <= 2 ? 82 :
+      auditCount <= 5 ? 67 :
+      auditCount <= 10 ? 50 : 35;
+
+    // Recompute overall_ats_score from weighted formula — AI ignores the formula and outputs ~85
+    const s = result.scorecard;
+    s.overall_ats_score.score = Math.round(
+      s.skills_match_score.score  * 0.35 +
+      s.keyword_density_score.score * 0.20 +
+      s.impact_score.score        * 0.20 +
+      s.grammar_score.score       * 0.15 +
+      s.formatting_score.score    * 0.10
     );
 
     return NextResponse.json<AnalyzeResponse>({ result });
@@ -257,6 +299,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json<ApiError>(
           { error: "Invalid Groq API key. Check your key and try again.", code: "INVALID_KEY" },
           { status: 401 }
+        );
+      }
+      if (status === 413) {
+        return NextResponse.json<ApiError>(
+          { error: "Request too large for this model's free tier. Switch to a larger model in Settings (e.g. Llama 3.3 70B) or try a shorter resume.", code: "RATE_LIMITED" },
+          { status: 413 }
         );
       }
       if (status === 429) {
