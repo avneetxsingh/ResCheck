@@ -58,25 +58,26 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
   return (
     <div className="space-y-4">
       {/* Summary bar */}
-      <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/40 flex-wrap">
-        <span className="text-sm font-medium">{errors.length} issues found</span>
-        <div className="flex items-center gap-2 flex-wrap">
-          {counts.critical > 0 && (
-            <span className="text-xs bg-red-500/10 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-medium">
-              {counts.critical} critical
-            </span>
-          )}
-          {counts.moderate > 0 && (
-            <span className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full font-medium">
-              {counts.moderate} moderate
-            </span>
-          )}
-          {counts.minor > 0 && (
-            <span className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
-              {counts.minor} minor
-            </span>
-          )}
-        </div>
+      <div className="flex items-center gap-4 flex-wrap text-sm">
+        <span className="font-medium">{errors.length} issues found</span>
+        {counts.critical > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+            {counts.critical} critical
+          </span>
+        )}
+        {counts.moderate > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            {counts.moderate} moderate
+          </span>
+        )}
+        {counts.minor > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            {counts.minor} minor
+          </span>
+        )}
       </div>
 
       {/* Severity filter */}

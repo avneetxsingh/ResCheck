@@ -82,10 +82,10 @@ export function SummaryPanel({ summary, metadata }: SummaryPanelProps) {
       </div>
 
       {/* Tailoring advice */}
-      <Card className="border-indigo-500/30 bg-indigo-500/5">
+      <Card className="border-primary/30 bg-primary/5">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Lightbulb className="w-4 h-4 text-indigo-500" />
+            <Lightbulb className="w-4 h-4 text-primary" />
             Tailoring Advice for This Role
           </CardTitle>
         </CardHeader>

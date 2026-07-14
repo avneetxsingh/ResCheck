@@ -36,7 +36,7 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
   return (
     <div className="space-y-6">
       {/* Match score */}
-      <div className="flex items-center gap-6 p-6 rounded-xl border bg-card">
+      <div className="flex items-center gap-6 p-6 rounded-xl border border-border/50">
         <ScoreRing
           score={skillsGap.overall_match_percentage}
           size="md"
@@ -50,7 +50,7 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
               : "All required skills are present in your resume."}
           </p>
           {skillsGap.bonus_skills.length > 0 && (
-            <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1.5 flex items-center gap-1">
+            <p className="text-xs text-primary mt-1.5 flex items-center gap-1">
               <Star className="w-3 h-3" />
               {skillsGap.bonus_skills.length} bonus skills stand out
             </p>
@@ -119,7 +119,7 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
       {skillsGap.bonus_skills.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Star className="w-3.5 h-3.5 text-indigo-500" />
+            <Star className="w-3.5 h-3.5 text-primary" />
             Bonus Skills in Your Resume
             <span className="text-xs text-muted-foreground font-normal">
               (not required but impressive)
@@ -140,7 +140,7 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
               return (
                 <span
                   key={`${name}-${i}`}
-                  className="inline-flex items-center px-2.5 py-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 text-xs font-medium"
+                  className="inline-flex items-center px-2.5 py-1 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-medium"
                 >
                   {name}
                 </span>

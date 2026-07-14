@@ -55,7 +55,7 @@ export function FormattingAuditPanel({ audit, atsExtraction }: FormattingAuditPa
             {atsExtraction.sections_detected.map((s) => (
               <span
                 key={s}
-                className="text-xs font-medium bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded-full capitalize"
+                className="text-xs font-medium bg-muted text-muted-foreground border border-border/50 px-2 py-0.5 rounded-full capitalize"
               >
                 {s}
               </span>
