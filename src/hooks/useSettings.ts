@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { SYSTEM_PROMPT, DEFAULT_MODEL } from "@/lib/prompts";
+import { DEFAULT_MODEL } from "@/lib/prompts";
 
 export interface AppSettings {
   apiKey: string;
@@ -14,7 +14,9 @@ const STORAGE_KEY = "rescheck_settings";
 const DEFAULTS: AppSettings = {
   apiKey: "",
   model: DEFAULT_MODEL,
-  systemPrompt: SYSTEM_PROMPT,
+  // Pipeline v2: prompts are server-owned and read-only in the UI; the stored
+  // field remains for localStorage backward compatibility only.
+  systemPrompt: "",
 };
 
 function loadSettings(): AppSettings {

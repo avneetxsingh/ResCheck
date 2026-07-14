@@ -6,7 +6,7 @@ export default function SettingsPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-muted-foreground mt-1">
-          Configure your API key, model, and analysis prompt.
+          Configure your API key and model. Analysis prompts are shown read-only.
         </p>
       </div>
       <SettingsPanel />

@@ -1,25 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Lock, CheckCircle2, ExternalLink, RotateCcw, Save, Trash2, AlertTriangle } from "lucide-react";
+import { Eye, EyeOff, Lock, CheckCircle2, ExternalLink, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSettings } from "@/hooks/useSettings";
 import { useHistory } from "@/hooks/useHistory";
 import { GROQ_MODELS } from "@/lib/groq";
+import { JD_SKILLS_PROMPT, LINE_AUDIT_PROMPT, SUMMARY_PROMPT } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
 
 export function SettingsPanel() {
-  const { settings, saveSettings, resetPrompt, resetAll, hydrated, isPromptCustomized, defaults } = useSettings();
+  const { settings, saveSettings, resetAll, hydrated, defaults } = useSettings();
   const { history: entries, clearAll } = useHistory();
 
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [model, setModel] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState("");
   const [saved, setSaved] = useState(false);
   const [confirmClearHistory, setConfirmClearHistory] = useState(false);
   const [confirmResetAll, setConfirmResetAll] = useState(false);
@@ -29,25 +27,16 @@ export function SettingsPanel() {
     if (hydrated) {
       setApiKey(settings.apiKey);
       setModel(settings.model);
-      setSystemPrompt(settings.systemPrompt);
     }
   }, [hydrated, settings]);
 
   const isValidKey = apiKey.startsWith("gsk_") && apiKey.length > 20;
-  const hasUnsavedChanges =
-    apiKey !== settings.apiKey ||
-    model !== settings.model ||
-    systemPrompt !== settings.systemPrompt;
+  const hasUnsavedChanges = apiKey !== settings.apiKey || model !== settings.model;
 
   const handleSave = () => {
-    saveSettings({ apiKey, model, systemPrompt });
+    saveSettings({ apiKey, model });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
-
-  const handleResetPrompt = () => {
-    setSystemPrompt(defaults.systemPrompt);
-    resetPrompt();
   };
 
   const handleClearHistory = () => {
@@ -59,7 +48,6 @@ export function SettingsPanel() {
     resetAll();
     setApiKey("");
     setModel(defaults.model);
-    setSystemPrompt(defaults.systemPrompt);
     setConfirmResetAll(false);
   };
 
@@ -160,43 +148,30 @@ export function SettingsPanel() {
         </CardContent>
       </Card>
 
-      {/* System Prompt */}
+      {/* Analysis Prompts (read-only) */}
       <Card>
         <CardHeader className="pb-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <CardTitle className="text-base">System Prompt</CardTitle>
-              <CardDescription className="mt-1">
-                Controls how the AI analyzes your resume. Edit to change scoring behavior or output focus.
-              </CardDescription>
-            </div>
-            {isPromptCustomized && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5 text-xs"
-                onClick={handleResetPrompt}
-              >
-                <RotateCcw className="w-3 h-3" />
-                Reset to default
-              </Button>
-            )}
-          </div>
+          <CardTitle className="text-base">Analysis Prompts</CardTitle>
+          <CardDescription className="mt-1">
+            Pipeline v2 uses three specialist prompts, applied server-side. They are shown here
+            for transparency and cannot be edited — scoring is computed deterministically in code.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Textarea
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            className="font-mono text-xs min-h-64 resize-y"
-            spellCheck={false}
-          />
-          {isPromptCustomized && systemPrompt === settings.systemPrompt && (
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" />
-              Custom prompt active
-            </p>
-          )}
+        <CardContent className="space-y-3">
+          {[
+            { name: "JD Skill Extraction", prompt: JD_SKILLS_PROMPT },
+            { name: "Resume Writing Audit", prompt: LINE_AUDIT_PROMPT },
+            { name: "Executive Summary", prompt: SUMMARY_PROMPT },
+          ].map(({ name, prompt }) => (
+            <details key={name} className="rounded-lg border">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium hover:bg-muted/40 rounded-lg">
+                {name}
+              </summary>
+              <pre className="px-3 pb-3 pt-1 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words">
+                {prompt}
+              </pre>
+            </details>
+          ))}
         </CardContent>
       </Card>
 
