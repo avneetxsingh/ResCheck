@@ -15,7 +15,7 @@ export function HistoryEmptyState() {
           Your past analyses will appear here after you run your first resume check.
         </p>
       </div>
-      <Link href="/analyze" className={cn(buttonVariants(), "gap-2 bg-indigo-600 hover:bg-indigo-700 text-white")}>
+      <Link href="/analyze" className={cn(buttonVariants(), "gap-2")}>
         Analyze a Resume
         <ArrowRight className="w-4 h-4" />
       </Link>

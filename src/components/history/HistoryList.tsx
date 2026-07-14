@@ -58,7 +58,7 @@ export function HistoryList() {
         </Dialog>
       </div>
 
-      <div className="space-y-3">
+      <div className="divide-y divide-border/50">
         {history.map((entry) => (
           <HistoryCard key={entry.id} entry={entry} onRemove={removeEntry} />
         ))}
