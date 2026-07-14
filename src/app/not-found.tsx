@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 export default function NotFound() {
   return (
@@ -10,7 +9,7 @@ export default function NotFound() {
       <p className="text-muted-foreground max-w-sm">
         The page you&apos;re looking for doesn&apos;t exist.
       </p>
-      <Link href="/" className={cn(buttonVariants(), "bg-indigo-600 hover:bg-indigo-700 text-white")}>
+      <Link href="/" className={buttonVariants()}>
         Go Home
       </Link>
     </div>
