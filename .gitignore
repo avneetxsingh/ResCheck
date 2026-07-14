@@ -48,3 +48,5 @@ CLAUDE.md
 AGENTS.md
 docs
 *.local
+# graphify knowledge-graph output (generated)
+graphify-out/
