@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,33 +19,58 @@ interface ResultsContainerProps {
   onReset: () => void;
 }
 
+const VERDICT_LABELS = {
+  strong: { label: "Strong", className: "text-green-600 dark:text-green-400" },
+  moderate: { label: "Moderate", className: "text-amber-600 dark:text-amber-400" },
+  needs_work: { label: "Needs work", className: "text-orange-600 dark:text-orange-400" },
+  critical: { label: "Critical", className: "text-red-600 dark:text-red-400" },
+} as const;
+
+const JD_QUALITY_DOT = {
+  rich: "bg-green-500",
+  moderate: "bg-amber-500",
+  sparse: "bg-orange-500",
+} as const;
+
+function scoreColorClass(score: number) {
+  if (score >= 80) return "text-green-600 dark:text-green-400";
+  if (score >= 60) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
+}
+
 export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
   const printRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+  const overall = result.scorecard.overall_ats_score.score;
+  const verdict = VERDICT_LABELS[result.summary.verdict] ?? VERDICT_LABELS.moderate;
 
   return (
-    <div ref={printRef} className="space-y-4">
-      {/* Header bar */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <motion.div
+      ref={printRef}
+      className="space-y-6"
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+    >
+      {/* Score hero strip */}
+      <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h2 className="text-lg font-bold">Analysis Results</h2>
-          <p className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+          <div className="flex items-baseline gap-3">
+            <span className={cn("text-6xl font-light tracking-tight tabular-nums", scoreColorClass(overall))}>
+              {overall}
+            </span>
+            <span className={cn("text-lg font-medium", verdict.className)}>{verdict.label}</span>
+          </div>
+          <p className="text-sm text-muted-foreground mt-2 flex items-center gap-2 flex-wrap">
             <span>{result.metadata.total_errors_found} issues</span>
-            <span>·</span>
+            <span aria-hidden>·</span>
             <span>{result.skills_gap.overall_match_percentage}% skill match</span>
             {result.metadata.jd_quality && (
               <>
-                <span>·</span>
-                <span
-                  className={cn(
-                    "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border",
-                    result.metadata.jd_quality === "rich"
-                      ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
-                      : result.metadata.jd_quality === "moderate"
-                      ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
-                      : "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/30"
-                  )}
-                >
-                  JD: {result.metadata.jd_quality}
+                <span aria-hidden>·</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={cn("w-1.5 h-1.5 rounded-full", JD_QUALITY_DOT[result.metadata.jd_quality])} />
+                  JD {result.metadata.jd_quality}
                 </span>
               </>
             )}
@@ -65,7 +91,7 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
           <TabsTrigger value="errors">
             Errors
             {result.errors.length > 0 && (
-              <span className="ml-1.5 text-xs bg-red-500/20 text-red-600 dark:text-red-400 px-1.5 rounded-full">
+              <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
                 {result.errors.length}
               </span>
             )}
@@ -79,9 +105,7 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
                 0
               );
               return count > 0 ? (
-                <span className="ml-1.5 text-xs bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 rounded-full">
-                  {count}
-                </span>
+                <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">{count}</span>
               ) : null;
             })()}
           </TabsTrigger>
@@ -89,15 +113,15 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
           <TabsTrigger value="summary">Summary</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-6">
+        <TabsContent value="overview" className="mt-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
           <ScorecardPanel scorecard={result.scorecard} verdict={result.summary.verdict} />
         </TabsContent>
 
-        <TabsContent value="errors" className="mt-6">
+        <TabsContent value="errors" className="mt-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
           <ErrorReportPanel errors={result.errors} />
         </TabsContent>
 
-        <TabsContent value="formatting" className="mt-6">
+        <TabsContent value="formatting" className="mt-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
           {result.formatting_audit ? (
             <FormattingAuditPanel audit={result.formatting_audit} atsExtraction={result.ats_extraction} />
           ) : (
@@ -107,14 +131,14 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
           )}
         </TabsContent>
 
-        <TabsContent value="skills" className="mt-6">
+        <TabsContent value="skills" className="mt-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
           <SkillsGapPanel skillsGap={result.skills_gap} />
         </TabsContent>
 
-        <TabsContent value="summary" className="mt-6">
+        <TabsContent value="summary" className="mt-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
           <SummaryPanel summary={result.summary} metadata={result.metadata} />
         </TabsContent>
       </Tabs>
-    </div>
+    </motion.div>
   );
 }
