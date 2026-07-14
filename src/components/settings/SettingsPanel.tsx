@@ -56,7 +56,7 @@ export function SettingsPanel() {
   return (
     <div className="space-y-6">
       {/* API Key */}
-      <Card>
+      <Card className="border-border/50 shadow-none">
         <CardHeader className="pb-4">
           <CardTitle className="text-base flex items-center gap-2">
             <Lock className="w-4 h-4 text-muted-foreground" />
@@ -75,12 +75,12 @@ export function SettingsPanel() {
               placeholder="gsk_..."
               className={cn(
                 "pr-20 font-mono text-sm",
-                isValidKey && "border-green-500 focus-visible:ring-green-500"
+                isValidKey && "border-primary focus-visible:ring-primary"
               )}
               autoComplete="off"
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              {isValidKey && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
+              {isValidKey && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
               <Button
                 type="button"
                 variant="ghost"
@@ -98,7 +98,7 @@ export function SettingsPanel() {
               href="https://console.groq.com/keys"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-0.5 text-indigo-500 hover:underline"
+              className="inline-flex items-center gap-0.5 text-primary hover:underline"
             >
               Get a free Groq API key
               <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
@@ -108,7 +108,7 @@ export function SettingsPanel() {
       </Card>
 
       {/* Model */}
-      <Card>
+      <Card className="border-border/50 shadow-none">
         <CardHeader className="pb-4">
           <CardTitle className="text-base">Model</CardTitle>
           <CardDescription>Choose which Groq model to use for analysis.</CardDescription>
@@ -121,7 +121,7 @@ export function SettingsPanel() {
                 className={cn(
                   "flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors",
                   model === m.id
-                    ? "border-indigo-500 bg-indigo-500/5"
+                    ? "border-primary bg-primary/5"
                     : "border-border hover:bg-muted/40"
                 )}
               >
@@ -132,7 +132,7 @@ export function SettingsPanel() {
                     value={m.id}
                     checked={model === m.id}
                     onChange={() => setModel(m.id)}
-                    className="accent-indigo-600"
+                    className="accent-[var(--primary)]"
                   />
                   <div>
                     <p className="text-sm font-medium">{m.label}</p>
@@ -149,7 +149,7 @@ export function SettingsPanel() {
       </Card>
 
       {/* Analysis Prompts (read-only) */}
-      <Card>
+      <Card className="border-border/50 shadow-none">
         <CardHeader className="pb-4">
           <CardTitle className="text-base">Analysis Prompts</CardTitle>
           <CardDescription className="mt-1">
@@ -181,7 +181,7 @@ export function SettingsPanel() {
           type="button"
           onClick={handleSave}
           disabled={!hasUnsavedChanges && !saved}
-          className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+          className="gap-2"
         >
           {saved ? (
             <>
@@ -201,7 +201,7 @@ export function SettingsPanel() {
       </div>
 
       {/* Danger zone */}
-      <Card className="border-destructive/30">
+      <Card className="border-destructive/30 shadow-none">
         <CardHeader className="pb-4">
           <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
         </CardHeader>
