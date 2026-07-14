@@ -22,6 +22,26 @@ function generateId(): string {
   return `err-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+interface SseEvent {
+  event: string;
+  data: unknown;
+}
+
+function parseSseFrame(frame: string): SseEvent | null {
+  let event = "message";
+  let dataStr = "";
+  for (const line of frame.split("\n")) {
+    if (line.startsWith("event: ")) event = line.slice(7).trim();
+    else if (line.startsWith("data: ")) dataStr += line.slice(6);
+  }
+  if (!dataStr) return null;
+  try {
+    return { event, data: JSON.parse(dataStr) };
+  } catch {
+    return null;
+  }
+}
+
 function isRawAnalysisResult(v: unknown): v is RawAnalysisResult {
   return (
     v !== null &&
@@ -56,12 +76,12 @@ export function useAnalysis(apiKey: string) {
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const { addEntry } = useHistory();
   const { settings } = useSettings();
 
   // Refs so we can clean up across renders without stale closures
   const abortControllerRef = useRef<AbortController | null>(null);
-  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Monotonic counter — each analyze() call gets its own snapshot; stale completions are discarded
   const callCountRef = useRef(0);
 
@@ -69,9 +89,6 @@ export function useAnalysis(apiKey: string) {
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort();
-      if (progressTimerRef.current !== null) {
-        clearInterval(progressTimerRef.current);
-      }
     };
   }, []);
 
@@ -84,10 +101,6 @@ export function useAnalysis(apiKey: string) {
 
       // Cancel any in-flight request from a previous call
       abortControllerRef.current?.abort();
-      if (progressTimerRef.current !== null) {
-        clearInterval(progressTimerRef.current);
-        progressTimerRef.current = null;
-      }
 
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -97,6 +110,7 @@ export function useAnalysis(apiKey: string) {
       setProgress(5);
       setError(null);
       setResult(null);
+      setWarnings([]);
 
       try {
         // Step 1: Parse PDF
@@ -120,13 +134,9 @@ export function useAnalysis(apiKey: string) {
 
         const { text: resumeText } = await parseRes.json();
 
-        // Step 2: Analyze with Groq
+        // Step 2: Analyze — SSE stream with real per-stage progress
         setStage("analyzing");
-        setProgress(40);
-
-        progressTimerRef.current = setInterval(() => {
-          setProgress((p) => (p < 85 ? p + 2 : p));
-        }, 400);
+        setProgress(35);
 
         const analyzeRes = await fetch("/api/analyze", {
           method: "POST",
@@ -138,27 +148,59 @@ export function useAnalysis(apiKey: string) {
             resume_text: resumeText,
             job_description: jobDescription,
             model: settings.model,
-            system_prompt: settings.systemPrompt,
           }),
           signal: controller.signal,
         });
 
-        if (progressTimerRef.current !== null) {
-          clearInterval(progressTimerRef.current);
-          progressTimerRef.current = null;
-        }
-
         if (thisCall !== callCountRef.current) return; // superseded
-        setProgress(90);
 
+        // Pre-stream validation failures come back as plain JSON with a 4xx status
         if (!analyzeRes.ok) {
           const err: ApiError = await analyzeRes.json();
           throw new Error(err.error);
         }
+        if (!analyzeRes.body) {
+          throw new Error("Streaming is not supported in this browser. Please try again.");
+        }
 
-        const responseBody = await analyzeRes.json();
-        const rawResult: unknown = responseBody?.result;
+        const reader = analyzeRes.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let rawResult: unknown = null;
+        let streamError: string | null = null;
 
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          let idx: number;
+          while ((idx = buffer.indexOf("\n\n")) !== -1) {
+            const frame = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            const evt = parseSseFrame(frame);
+            if (!evt) continue;
+            if (thisCall !== callCountRef.current) return; // superseded
+
+            if (evt.event === "stage") {
+              const d = evt.data as { progress?: number };
+              if (typeof d.progress === "number") setProgress(Math.min(95, d.progress));
+            } else if (evt.event === "warning") {
+              const d = evt.data as { message?: string };
+              if (typeof d.message === "string") {
+                const message = d.message;
+                setWarnings((w) => [...w, message]);
+              }
+            } else if (evt.event === "result") {
+              rawResult = (evt.data as { result?: unknown }).result ?? null;
+            } else if (evt.event === "error") {
+              const d = evt.data as { error?: string };
+              streamError = typeof d.error === "string" ? d.error : "Analysis failed.";
+            }
+          }
+        }
+
+        if (streamError) throw new Error(streamError);
         if (!isRawAnalysisResult(rawResult)) {
           throw new Error(
             "Received an unexpected response shape from the server. Please try again."
@@ -193,20 +235,17 @@ export function useAnalysis(apiKey: string) {
         );
       }
     },
-    [apiKey, addEntry, settings.model, settings.systemPrompt]
+    [apiKey, addEntry, settings.model]
   );
 
   const reset = useCallback(() => {
     abortControllerRef.current?.abort();
-    if (progressTimerRef.current !== null) {
-      clearInterval(progressTimerRef.current);
-      progressTimerRef.current = null;
-    }
     setStage("idle");
     setProgress(0);
     setResult(null);
     setError(null);
+    setWarnings([]);
   }, []);
 
-  return { stage, progress, result, error, analyze, reset };
+  return { stage, progress, result, error, warnings, analyze, reset };
 }
