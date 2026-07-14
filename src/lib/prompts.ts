@@ -45,23 +45,6 @@ Format: "[Section] > [issue type]: '[verbatim text]'"
 - original_line: verbatim from resume (5–60 words)
 - Only report where fixed_line is meaningfully better`;
 
-export function buildUserPrompt(
-  resumeText: string,
-  jobDescription: string
-): string {
-  // Use XML tags instead of backtick code fences to prevent prompt injection.
-  // Resume or JD content cannot "close" an XML tag by containing its own text.
-  return `<resume_text>
-${resumeText.trim()}
-</resume_text>
-
-<job_description>
-${jobDescription.trim()}
-</job_description>
-
-Analyze the resume against the job description. Return ONLY the JSON report — no other text.`;
-}
-
 // ── Pipeline v2 specialist prompts ────────────────────────────────────────
 // Three narrow prompts replace the single do-everything prompt. Each keeps
 // the XML-delimited user content (injection defense) and the "never invent,
