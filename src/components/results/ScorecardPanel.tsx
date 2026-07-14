@@ -6,12 +6,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Info } from "lucide-react";
-import type { Scorecard, ExecutiveSummary } from "@/types/analysis";
+import type { Scorecard } from "@/types/analysis";
 import { cn } from "@/lib/utils";
 
 interface ScorecardPanelProps {
   scorecard: Scorecard;
-  verdict: ExecutiveSummary["verdict"];
 }
 
 const METRICS = [

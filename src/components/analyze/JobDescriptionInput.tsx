@@ -13,10 +13,10 @@ export function JobDescriptionInput({ value, onChange }: JobDescriptionInputProp
 
   return (
     <div className="space-y-2">
-      <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
+      <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
         Job Description
-        <span className="text-red-500">*</span>
-      </label>
+        <span className="text-red-600 dark:text-red-400">*</span>
+      </p>
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}

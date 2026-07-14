@@ -48,7 +48,7 @@ export function ProgressStream({ stage, progress }: ProgressStreamProps) {
   if (stage === "idle" || stage === "complete" || stage === "error") return null;
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card p-5">
+    <div role="status" aria-live="polite" className="rounded-xl border border-border/50 bg-card p-5">
       <ul className="space-y-3">
         {STEPS.map((label, i) => {
           const isDone = i < activeStep;

@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,17 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
         </div>
       </div>
 
+      {result.warnings && result.warnings.length > 0 && (
+        <ul className="space-y-1">
+          {result.warnings.map((w, i) => (
+            <li key={i} className="text-xs text-amber-600 dark:text-amber-400 flex gap-1.5">
+              <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+              {w}
+            </li>
+          ))}
+        </ul>
+      )}
+
       <Tabs defaultValue="overview">
         <TabsList className="w-full sm:w-auto flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -114,7 +125,7 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
         </TabsList>
 
         <TabsContent value="overview" className="mt-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
-          <ScorecardPanel scorecard={result.scorecard} verdict={result.summary.verdict} />
+          <ScorecardPanel scorecard={result.scorecard} />
         </TabsContent>
 
         <TabsContent value="errors" className="mt-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">

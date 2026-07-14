@@ -15,7 +15,7 @@ interface ErrorCardProps {
 const SEVERITY_STYLES = {
   critical: "border-l-red-500",
   moderate: "border-l-amber-500",
-  minor: "border-l-blue-400",
+  minor: "border-l-blue-500",
 };
 
 const ERROR_TYPE_LABELS: Record<string, string> = {
@@ -61,7 +61,7 @@ export function ErrorCard({ error }: ErrorCardProps) {
               <span className={cn("w-1.5 h-1.5 rounded-full", {
                 critical: "bg-red-500",
                 moderate: "bg-amber-500",
-                minor: "bg-blue-400",
+                minor: "bg-blue-500",
               }[error.severity])} />
               {error.severity}
             </span>

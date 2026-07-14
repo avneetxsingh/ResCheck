@@ -21,7 +21,7 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [jobDescription, setJobDescription] = useState("");
-  const { stage, progress, result, error, analyze } = useAnalysis(settings.apiKey);
+  const { stage, progress, result, error, warnings, analyze } = useAnalysis(settings.apiKey);
 
   const reportedRef = useRef<AnalysisResult | null>(null);
   useEffect(() => {
@@ -59,7 +59,7 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         <div className="space-y-2">
-          <label className="text-sm font-medium">Resume</label>
+          <p className="text-sm font-medium">Resume <span className="text-red-600 dark:text-red-400">*</span></p>
           <ResumeUploader
             file={file}
             onFileAccepted={(f) => { setFile(f); setFileError(null); }}
@@ -78,6 +78,17 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
       </div>
 
       {isRunning && <ProgressStream stage={stage} progress={progress} />}
+
+      {isRunning && warnings.length > 0 && (
+        <ul className="space-y-1">
+          {warnings.map((w, i) => (
+            <li key={i} className="text-xs text-amber-600 dark:text-amber-400 flex gap-1.5">
+              <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+              {w}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {stage === "error" && error && (
         <Alert variant="destructive">

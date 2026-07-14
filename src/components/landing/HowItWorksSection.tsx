@@ -5,7 +5,7 @@ const STEPS = [
   },
   {
     title: "Upload your resume PDF",
-    description: "Parsed locally on the server; nothing is stored anywhere.",
+    description: "Parsed in-memory on the server; nothing is stored anywhere.",
   },
   {
     title: "Get scores and fixes",

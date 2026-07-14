@@ -132,7 +132,7 @@ export function SettingsPanel() {
                     value={m.id}
                     checked={model === m.id}
                     onChange={() => setModel(m.id)}
-                    className="accent-[var(--primary)]"
+                    className="accent-primary"
                   />
                   <div>
                     <p className="text-sm font-medium">{m.label}</p>

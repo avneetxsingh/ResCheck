@@ -74,7 +74,7 @@ export function ResumeUploader({
       className={cn(
         "relative flex flex-col items-center justify-center gap-3 p-8 min-h-[224px] rounded-lg border border-dashed cursor-pointer transition-colors",
         isDragActive
-          ? "border-primary bg-primary/5"
+          ? "border-primary"
           : "border-border hover:border-muted-foreground/40"
       )}
     >
