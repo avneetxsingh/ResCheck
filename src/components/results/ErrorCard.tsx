@@ -49,7 +49,7 @@ export function ErrorCard({ error }: ErrorCardProps) {
   };
 
   return (
-    <div className={cn("rounded-lg border border-l-2 border-border/50 overflow-hidden", SEVERITY_STYLES[error.severity])}>
+    <div className={cn("rounded-lg border border-border/50 border-l-2 bg-card overflow-hidden", SEVERITY_STYLES[error.severity])}>
       {/* Header */}
       <button
         className="w-full flex items-start gap-3 p-4 text-left hover:bg-muted/30 transition-colors"
