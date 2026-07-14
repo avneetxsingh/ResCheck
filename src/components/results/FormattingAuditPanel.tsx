@@ -1,11 +1,12 @@
 "use client";
 
 import { CheckCircle2, AlertTriangle, Minus } from "lucide-react";
-import type { FormattingAudit } from "@/types/analysis";
+import type { FormattingAudit, AtsExtraction } from "@/types/analysis";
 import { cn } from "@/lib/utils";
 
 interface FormattingAuditPanelProps {
   audit: FormattingAudit;
+  atsExtraction?: AtsExtraction;
 }
 
 const CATEGORIES: { key: keyof Omit<FormattingAudit, "is_clean">; label: string; description: string }[] = [
@@ -41,11 +42,64 @@ const CATEGORIES: { key: keyof Omit<FormattingAudit, "is_clean">; label: string;
   },
 ];
 
-export function FormattingAuditPanel({ audit }: FormattingAuditPanelProps) {
+export function FormattingAuditPanel({ audit, atsExtraction }: FormattingAuditPanelProps) {
   const totalIssues = CATEGORIES.reduce((sum, { key }) => sum + audit[key].length, 0);
 
   return (
     <div className="space-y-3">
+      {/* What the ATS sees — only for pipeline v2 results */}
+      {atsExtraction && (
+        <div className="rounded-lg border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">What the ATS sees</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {atsExtraction.sections_detected.map((s) => (
+              <span
+                key={s}
+                className="text-xs font-medium bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded-full capitalize"
+              >
+                {s}
+              </span>
+            ))}
+            {atsExtraction.sections_detected.length === 0 && (
+              <span className="text-xs text-muted-foreground">No sections detected</span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+            {(
+              [
+                ["Email", atsExtraction.contact.email],
+                ["Phone", atsExtraction.contact.phone],
+                ["Links", atsExtraction.contact.links.length > 0 ? `${atsExtraction.contact.links.length} found` : null],
+              ] as const
+            ).map(([label, value]) => (
+              <div key={label} className="flex items-center gap-2">
+                {value ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                )}
+                <span className="text-xs">
+                  <span className="font-medium">{label}:</span>{" "}
+                  <span className={value ? "text-muted-foreground" : "text-amber-600 dark:text-amber-400"}>
+                    {value ?? "not found"}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+          {atsExtraction.warnings.length > 0 && (
+            <ul className="space-y-1">
+              {atsExtraction.warnings.map((w, i) => (
+                <li key={i} className="text-xs text-amber-600 dark:text-amber-400 flex gap-1.5">
+                  <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                  {w}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">

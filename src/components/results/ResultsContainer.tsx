@@ -99,7 +99,7 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
 
         <TabsContent value="formatting" className="mt-6">
           {result.formatting_audit ? (
-            <FormattingAuditPanel audit={result.formatting_audit} />
+            <FormattingAuditPanel audit={result.formatting_audit} atsExtraction={result.ats_extraction} />
           ) : (
             <p className="text-sm text-muted-foreground text-center py-12">
               Formatting audit not available for this entry — re-analyze to get per-category breakdown.
