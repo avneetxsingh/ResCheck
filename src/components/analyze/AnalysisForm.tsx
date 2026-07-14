@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Sparkles, AlertCircle, Settings } from "lucide-react";
+import { AlertCircle, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ResumeUploader } from "./ResumeUploader";
 import { JobDescriptionInput } from "./JobDescriptionInput";
@@ -44,13 +43,12 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* API key status */}
       {hydrated && !hasKey && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="flex items-center gap-2">
             No Groq API key set.{" "}
-            <Link href="/settings" className="font-medium text-indigo-600 hover:underline inline-flex items-center gap-1">
+            <Link href="/settings" className="font-medium text-primary hover:underline inline-flex items-center gap-1">
               <Settings className="w-3.5 h-3.5" />
               Open Settings
             </Link>{" "}
@@ -59,11 +57,9 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
         </Alert>
       )}
 
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base">1. Upload Resume</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Resume</label>
           <ResumeUploader
             file={file}
             onFileAccepted={(f) => { setFile(f); setFileError(null); }}
@@ -71,22 +67,15 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
             onClear={() => setFile(null)}
           />
           {fileError && (
-            <p className="text-sm text-red-500 mt-2 flex items-center gap-1.5">
+            <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1.5">
               <AlertCircle className="w-3.5 h-3.5" />
               {fileError}
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base">2. Job Description</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <JobDescriptionInput value={jobDescription} onChange={setJobDescription} />
-        </CardContent>
-      </Card>
+        <JobDescriptionInput value={jobDescription} onChange={setJobDescription} />
+      </div>
 
       {isRunning && <ProgressStream stage={stage} progress={progress} />}
 
@@ -97,14 +86,8 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
         </Alert>
       )}
 
-      <Button
-        type="submit"
-        size="lg"
-        disabled={!canSubmit}
-        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
-      >
-        <Sparkles className="w-4 h-4" />
-        {isRunning ? "Analyzing..." : "Analyze My Resume"}
+      <Button type="submit" size="lg" disabled={!canSubmit} className="w-full gap-2">
+        {isRunning ? "Analyzing…" : "Analyze My Resume"}
       </Button>
 
       {!canSubmit && !isRunning && hydrated && (

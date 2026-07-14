@@ -1,7 +1,6 @@
 "use client";
 
 import { Textarea } from "@/components/ui/textarea";
-import { Briefcase } from "lucide-react";
 
 interface JobDescriptionInputProps {
   value: string;
@@ -15,7 +14,6 @@ export function JobDescriptionInput({ value, onChange }: JobDescriptionInputProp
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium text-foreground flex items-center gap-1.5">
-        <Briefcase className="w-3.5 h-3.5 text-muted-foreground" />
         Job Description
         <span className="text-red-500">*</span>
       </label>
@@ -23,17 +21,17 @@ export function JobDescriptionInput({ value, onChange }: JobDescriptionInputProp
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Paste the full job description here — include requirements, responsibilities, and qualifications for the best analysis..."
-        className="min-h-[180px] resize-y text-sm"
+        className="min-h-[224px] resize-y text-sm"
       />
       <p className="text-xs text-muted-foreground text-right">
         {wordCount} words · {charCount} chars
         {wordCount > 0 && wordCount < 30 && (
-          <span className="text-amber-500 ml-2">
+          <span className="text-amber-600 dark:text-amber-400 ml-2">
             — sparse JD: resume audit still runs, keyword match will be limited
           </span>
         )}
         {wordCount >= 30 && wordCount < 80 && (
-          <span className="text-amber-500 ml-2">
+          <span className="text-amber-600 dark:text-amber-400 ml-2">
             — moderate JD: more detail improves skill matching
           </span>
         )}
