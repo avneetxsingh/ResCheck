@@ -8,31 +8,27 @@ interface JobDescriptionInputProps {
 }
 
 export function JobDescriptionInput({ value, onChange }: JobDescriptionInputProps) {
-  const charCount = value.length;
   const wordCount = value.trim() ? value.trim().split(/\s+/).length : 0;
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-        Job Description
-        <span className="text-red-600 dark:text-red-400">*</span>
-      </p>
+      <p className="text-sm font-medium text-foreground">Job description</p>
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Paste the full job description here — include requirements, responsibilities, and qualifications for the best analysis..."
+        placeholder="Paste the full posting — requirements, responsibilities, all of it."
         className="min-h-[224px] resize-y text-sm"
       />
       <p className="text-xs text-muted-foreground text-right">
-        {wordCount} words · {charCount} chars
+        {wordCount} words
         {wordCount > 0 && wordCount < 30 && (
           <span className="text-amber-600 dark:text-amber-400 ml-2">
-            — sparse JD: resume audit still runs, keyword match will be limited
+            — short posting: keyword matching will be thin, the writing audit still runs
           </span>
         )}
         {wordCount >= 30 && wordCount < 80 && (
           <span className="text-amber-600 dark:text-amber-400 ml-2">
-            — moderate JD: more detail improves skill matching
+            — more detail here means better skill matching
           </span>
         )}
       </p>

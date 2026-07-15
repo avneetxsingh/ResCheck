@@ -15,7 +15,7 @@ interface HistoryCardProps {
 const VERDICT_LABELS = {
   strong: "Strong",
   moderate: "Moderate",
-  needs_work: "Needs Work",
+  needs_work: "Needs work",
   critical: "Critical",
 };
 

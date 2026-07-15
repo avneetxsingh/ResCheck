@@ -43,16 +43,16 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
           label="Skill Match"
         />
         <div>
-          <p className="font-medium">Skills Match Overview</p>
+          <p className="font-medium">Skill match</p>
           <p className="text-sm text-muted-foreground mt-1">
             {missingCount > 0
-              ? `${missingCount} skills from the job description are missing from your resume.`
-              : "All required skills are present in your resume."}
+              ? `${missingCount} ${missingCount === 1 ? "skill" : "skills"} from the posting ${missingCount === 1 ? "doesn't" : "don't"} appear in your resume.`
+              : "Every skill the posting asks for shows up in your resume."}
           </p>
           {skillsGap.bonus_skills.length > 0 && (
             <p className="text-xs text-primary mt-1.5 flex items-center gap-1">
               <Star className="w-3 h-3" />
-              {skillsGap.bonus_skills.length} bonus skills stand out
+              plus {skillsGap.bonus_skills.length} the posting didn&apos;t ask for
             </p>
           )}
         </div>
@@ -78,9 +78,9 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
         <div className="space-y-3">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-            Must Have
-            <span className="text-xs text-muted-foreground font-normal">
-              ({skillsGap.must_have.length} skills)
+            Must have
+            <span className="text-xs text-muted-foreground font-normal tabular-nums">
+              {skillsGap.must_have.length}
             </span>
           </h3>
           {filteredMustHave.length > 0 ? (
@@ -98,9 +98,9 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
         <div className="space-y-3">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
-            Nice to Have
-            <span className="text-xs text-muted-foreground font-normal">
-              ({skillsGap.nice_to_have.length} skills)
+            Nice to have
+            <span className="text-xs text-muted-foreground font-normal tabular-nums">
+              {skillsGap.nice_to_have.length}
             </span>
           </h3>
           {filteredNiceToHave.length > 0 ? (
@@ -120,9 +120,9 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
         <div className="space-y-3">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Star className="w-3.5 h-3.5 text-primary" />
-            Bonus Skills in Your Resume
+            Beyond the posting
             <span className="text-xs text-muted-foreground font-normal">
-              (not required but impressive)
+              on your resume, not in the JD
             </span>
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -155,7 +155,7 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
         <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/5 border border-green-500/30">
           <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
           <p className="text-sm text-green-700 dark:text-green-400">
-            All required skills are present in your resume. Strong match!
+            Nothing missing — every skill in the posting is covered.
           </p>
         </div>
       )}

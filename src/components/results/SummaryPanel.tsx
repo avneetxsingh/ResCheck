@@ -11,10 +11,10 @@ interface SummaryPanelProps {
 }
 
 const VERDICT_BANNER = {
-  strong: { bg: "bg-green-500/10 border-green-500/30", text: "text-green-700 dark:text-green-400", icon: "✓" },
-  moderate: { bg: "bg-amber-500/10 border-amber-500/30", text: "text-amber-700 dark:text-amber-400", icon: "~" },
-  needs_work: { bg: "bg-orange-500/10 border-orange-500/30", text: "text-orange-700 dark:text-orange-400", icon: "!" },
-  critical: { bg: "bg-red-500/10 border-red-500/30", text: "text-red-700 dark:text-red-400", icon: "✕" },
+  strong: { bg: "bg-green-500/10 border-green-500/30", text: "text-green-700 dark:text-green-400", dot: "bg-green-500" },
+  moderate: { bg: "bg-amber-500/10 border-amber-500/30", text: "text-amber-700 dark:text-amber-400", dot: "bg-amber-500" },
+  needs_work: { bg: "bg-orange-500/10 border-orange-500/30", text: "text-orange-700 dark:text-orange-400", dot: "bg-orange-500" },
+  critical: { bg: "bg-red-500/10 border-red-500/30", text: "text-red-700 dark:text-red-400", dot: "bg-red-500" },
 };
 
 export function SummaryPanel({ summary, metadata }: SummaryPanelProps) {
@@ -24,9 +24,7 @@ export function SummaryPanel({ summary, metadata }: SummaryPanelProps) {
     <div className="space-y-4">
       {/* Verdict banner */}
       <div className={cn("rounded-xl border p-4 flex items-start gap-3", banner.bg)}>
-        <span className={cn("text-2xl font-bold leading-none mt-0.5", banner.text)}>
-          {banner.icon}
-        </span>
+        <span className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", banner.dot)} />
         <div>
           <p className={cn("font-semibold text-base", banner.text)}>{summary.headline}</p>
           <p className="text-sm text-muted-foreground mt-1">
@@ -41,14 +39,14 @@ export function SummaryPanel({ summary, metadata }: SummaryPanelProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-green-500" />
-              Top Strengths
+              Working for you
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
               {(summary.top_strengths ?? []).slice(0, 3).map((s, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <span className="w-5 h-5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                <li key={i} className="flex items-start gap-2.5 text-sm">
+                  <span className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5 w-4 text-right">
                     {i + 1}
                   </span>
                   {s}
@@ -63,14 +61,14 @@ export function SummaryPanel({ summary, metadata }: SummaryPanelProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-500" />
-              Top Improvements
+              Fix first
             </CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
               {(summary.top_improvements ?? []).slice(0, 3).map((s, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                  <span className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                <li key={i} className="flex items-start gap-2.5 text-sm">
+                  <span className="text-xs text-muted-foreground tabular-nums shrink-0 mt-0.5 w-4 text-right">
                     {i + 1}
                   </span>
                   {s}
@@ -86,7 +84,7 @@ export function SummaryPanel({ summary, metadata }: SummaryPanelProps) {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
             <Lightbulb className="w-4 h-4 text-primary" />
-            Tailoring Advice for This Role
+            For this role
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -96,7 +94,7 @@ export function SummaryPanel({ summary, metadata }: SummaryPanelProps) {
 
       {/* Metadata */}
       <p className="text-xs text-muted-foreground text-center">
-        Analyzed on {new Date(metadata.analyzed_at).toLocaleString()} · Model: {metadata.model}
+        {new Date(metadata.analyzed_at).toLocaleString()} · {metadata.model}
       </p>
     </div>
   );

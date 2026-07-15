@@ -41,7 +41,7 @@ export function ScorecardPanel({ scorecard }: ScorecardPanelProps) {
           {scorecard.overall_ats_score.rationale}
         </p>
         <p className="text-sm font-medium text-primary">
-          Tip: {scorecard.overall_ats_score.improvement_tip}
+          {scorecard.overall_ats_score.improvement_tip}
         </p>
       </div>
 
@@ -59,7 +59,7 @@ export function ScorecardPanel({ scorecard }: ScorecardPanelProps) {
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs text-sm">
                     <p className="font-medium mb-1">{metric.rationale}</p>
-                    <p className="text-muted-foreground">Tip: {metric.improvement_tip}</p>
+                    <p className="text-muted-foreground">{metric.improvement_tip}</p>
                   </TooltipContent>
                 </Tooltip>
               </div>

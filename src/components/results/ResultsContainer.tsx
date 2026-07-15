@@ -70,7 +70,7 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
                 <span aria-hidden>·</span>
                 <span className="inline-flex items-center gap-1.5">
                   <span className={cn("w-1.5 h-1.5 rounded-full", JD_QUALITY_DOT[result.metadata.jd_quality])} />
-                  JD {result.metadata.jd_quality}
+                  {result.metadata.jd_quality} JD
                 </span>
               </>
             )}
@@ -80,7 +80,7 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
           <ExportButton result={result} targetRef={printRef} />
           <Button variant="outline" size="sm" className="gap-2" onClick={onReset}>
             <RotateCcw className="w-4 h-4" />
-            Analyze Another
+            Analyze another
           </Button>
         </div>
       </div>
@@ -120,7 +120,7 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
               ) : null;
             })()}
           </TabsTrigger>
-          <TabsTrigger value="skills">Skills Gap</TabsTrigger>
+          <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="summary">Summary</TabsTrigger>
         </TabsList>
 
@@ -137,7 +137,7 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
             <FormattingAuditPanel audit={result.formatting_audit} atsExtraction={result.ats_extraction} />
           ) : (
             <p className="text-sm text-muted-foreground text-center py-12">
-              Formatting audit not available for this entry — re-analyze to get per-category breakdown.
+              This entry predates the formatting audit — run a fresh analysis to see it.
             </p>
           )}
         </TabsContent>

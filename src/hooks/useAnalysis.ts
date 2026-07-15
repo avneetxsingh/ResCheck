@@ -95,7 +95,7 @@ export function useAnalysis(apiKey: string) {
   const analyze = useCallback(
     async (file: File, jobDescription: string) => {
       if (!apiKey) {
-        setError("Please enter your Groq API key first.");
+        setError("Add your Groq API key in Settings first.");
         return;
       }
 
@@ -160,7 +160,7 @@ export function useAnalysis(apiKey: string) {
           throw new Error(err.error);
         }
         if (!analyzeRes.body) {
-          throw new Error("Streaming is not supported in this browser. Please try again.");
+          throw new Error("Your browser doesn't support streamed responses — try a current Chrome, Safari, or Firefox.");
         }
 
         const reader = analyzeRes.body.getReader();

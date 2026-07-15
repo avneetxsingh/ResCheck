@@ -9,7 +9,7 @@ const STEPS = [
   },
   {
     title: "Get scores and fixes",
-    description: "ATS score, skill gaps, and line-by-line fixes in seconds.",
+    description: "One score, the reasons behind it, and a rewrite for every flagged line.",
   },
 ];
 

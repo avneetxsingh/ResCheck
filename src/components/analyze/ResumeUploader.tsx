@@ -26,11 +26,11 @@ export function ResumeUploader({
       } else if (rejected.length > 0) {
         const code = rejected[0].errors[0]?.code;
         if (code === "file-too-large") {
-          onFileRejected("File too large. Maximum size is 5MB.");
+          onFileRejected("That file is over 5 MB.");
         } else if (code === "file-invalid-type") {
-          onFileRejected("Only PDF files are supported.");
+          onFileRejected("PDFs only — export your resume as a PDF first.");
         } else {
-          onFileRejected("Could not accept this file.");
+          onFileRejected("Couldn't read that file.");
         }
       }
     },
@@ -88,10 +88,10 @@ export function ResumeUploader({
       </div>
       <div className="text-center">
         <p className="text-sm font-medium">
-          {isDragActive ? "Drop your PDF here" : "Upload Resume PDF"}
+          {isDragActive ? "Drop it" : "Drop your resume here"}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Drag & drop or click to browse · PDF only · Max 5MB
+          or click to browse · PDF, up to 5 MB
         </p>
       </div>
     </div>

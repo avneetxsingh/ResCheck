@@ -17,18 +17,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ResCheck — Land the Interview. Beat the Algorithm.",
+  title: "ResCheck — does your resume pass?",
   description:
-    "AI-powered resume optimization. Get an ATS score, line-by-line fixes, and a skills gap analysis in seconds. Powered by Groq.",
+    "Check a resume against a job description: the score an ATS would give it, the lines that hurt it, and the skills it's missing. Bring your own Groq key; nothing is stored.",
   openGraph: {
-    title: "ResCheck — AI Resume Optimizer",
-    description: "Land the interview. Beat the algorithm.",
+    title: "ResCheck",
+    description: "Check a resume against a job description before you apply.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "ResCheck — AI Resume Optimizer",
-    description: "Land the interview. Beat the algorithm.",
+    title: "ResCheck",
+    description: "Check a resume against a job description before you apply.",
   },
 };
 

@@ -22,19 +22,19 @@ const ERROR_TYPE_LABELS: Record<string, string> = {
   grammar: "Grammar",
   spelling: "Spelling",
   punctuation: "Punctuation",
-  weak_verb: "Weak Verb",
-  passive_voice: "Passive Voice",
-  quantification_missing: "No Metrics",
-  vague_language: "Vague Language",
-  keyword_missing: "Missing Keyword",
+  weak_verb: "Weak verb",
+  passive_voice: "Passive voice",
+  quantification_missing: "No metrics",
+  vague_language: "Vague wording",
+  keyword_missing: "Missing keyword",
   formatting: "Formatting",
-  ats_unfriendly: "ATS Unfriendly",
+  ats_unfriendly: "ATS-unfriendly",
   redundancy: "Redundancy",
-  tense_inconsistency: "Tense Issue",
-  extra_whitespace: "Extra Space",
-  inconsistent_bold: "Bold Inconsistency",
-  inconsistent_bullets: "Bullet Inconsistency",
-  date_format: "Date Format",
+  tense_inconsistency: "Tense",
+  extra_whitespace: "Extra space",
+  inconsistent_bold: "Inconsistent bold",
+  inconsistent_bullets: "Inconsistent bullets",
+  date_format: "Date format",
   capitalization_inconsistency: "Capitalization",
 };
 
@@ -95,7 +95,7 @@ export function ErrorCard({ error }: ErrorCardProps) {
             {copied ? (
               <>
                 <Check className="w-3.5 h-3.5 text-green-500" />
-                Copied!
+                Copied
               </>
             ) : (
               <>

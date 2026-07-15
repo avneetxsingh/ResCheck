@@ -60,10 +60,11 @@ export function SettingsPanel() {
         <CardHeader className="pb-4">
           <CardTitle className="text-base flex items-center gap-2">
             <Lock className="w-4 h-4 text-muted-foreground" />
-            Groq API Key
+            Groq API key
           </CardTitle>
           <CardDescription>
-            Stored only in your browser. Never sent to our servers.
+            Saved to this browser&apos;s localStorage and sent straight to Groq
+            with each analysis — there&apos;s no server to store it on.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -111,7 +112,9 @@ export function SettingsPanel() {
       <Card className="border-border/50 shadow-none">
         <CardHeader className="pb-4">
           <CardTitle className="text-base">Model</CardTitle>
-          <CardDescription>Choose which Groq model to use for analysis.</CardDescription>
+          <CardDescription>
+            The default is the fastest; the larger ones catch subtler writing issues.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-2">
@@ -151,17 +154,18 @@ export function SettingsPanel() {
       {/* Analysis Prompts (read-only) */}
       <Card className="border-border/50 shadow-none">
         <CardHeader className="pb-4">
-          <CardTitle className="text-base">Analysis Prompts</CardTitle>
+          <CardTitle className="text-base">Prompts</CardTitle>
           <CardDescription className="mt-1">
-            Pipeline v2 uses three specialist prompts, applied server-side. They are shown here
-            for transparency and cannot be edited — scoring is computed deterministically in code.
+            The three prompts the analysis runs on, if you&apos;re curious. They live
+            on the server and aren&apos;t editable — scores are computed in code, not
+            by the model.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {[
-            { name: "JD Skill Extraction", prompt: JD_SKILLS_PROMPT },
-            { name: "Resume Writing Audit", prompt: LINE_AUDIT_PROMPT },
-            { name: "Executive Summary", prompt: SUMMARY_PROMPT },
+            { name: "JD skill extraction", prompt: JD_SKILLS_PROMPT },
+            { name: "Resume writing audit", prompt: LINE_AUDIT_PROMPT },
+            { name: "Executive summary", prompt: SUMMARY_PROMPT },
           ].map(({ name, prompt }) => (
             <details key={name} className="rounded-lg border">
               <summary className="cursor-pointer px-3 py-2 text-sm font-medium hover:bg-muted/40 rounded-lg">
@@ -191,27 +195,29 @@ export function SettingsPanel() {
           ) : (
             <>
               <Save className="w-4 h-4" />
-              Save Settings
+              Save
             </>
           )}
         </Button>
         {hasUnsavedChanges && (
-          <p className="text-xs text-muted-foreground">You have unsaved changes</p>
+          <p className="text-xs text-muted-foreground">Unsaved changes</p>
         )}
       </div>
 
       {/* Danger zone */}
       <Card className="border-destructive/30 shadow-none">
         <CardHeader className="pb-4">
-          <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
+          <CardTitle className="text-base text-destructive">Danger zone</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Clear history */}
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium">Clear Analysis History</p>
+              <p className="text-sm font-medium">Clear history</p>
               <p className="text-xs text-muted-foreground">
-                Removes all {entries.length} saved analyses from your browser.
+                {entries.length === 1
+                  ? "Deletes the 1 saved analysis. There's no undo."
+                  : `Deletes all ${entries.length} saved analyses. There's no undo.`}
               </p>
             </div>
             {confirmClearHistory ? (
@@ -233,7 +239,7 @@ export function SettingsPanel() {
                 disabled={entries.length === 0}
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Clear History
+                Clear history
               </Button>
             )}
           </div>
@@ -243,9 +249,9 @@ export function SettingsPanel() {
           {/* Reset all */}
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium">Reset All Settings</p>
+              <p className="text-sm font-medium">Reset everything</p>
               <p className="text-xs text-muted-foreground">
-                Clears your API key, resets model and prompt to defaults.
+                Removes your API key and puts the model back to the default.
               </p>
             </div>
             {confirmResetAll ? (
@@ -266,7 +272,7 @@ export function SettingsPanel() {
                 onClick={() => setConfirmResetAll(true)}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                Reset All
+                Reset
               </Button>
             )}
           </div>

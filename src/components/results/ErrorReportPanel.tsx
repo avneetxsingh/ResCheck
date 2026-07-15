@@ -47,9 +47,9 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
         <CheckCircle2 className="w-12 h-12 text-green-500" />
-        <p className="text-lg font-medium">No errors found</p>
+        <p className="text-lg font-medium">No writing issues</p>
         <p className="text-sm text-muted-foreground max-w-sm">
-          Your resume is clean! The AI found no grammar, spelling, or formatting issues.
+          The line-by-line audit came back clean — nothing to flag.
         </p>
       </div>
     );
@@ -82,7 +82,7 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
 
       {/* Severity filter */}
       <div className="space-y-2">
-        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">By Severity</p>
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Severity</p>
         <div className="flex gap-2 flex-wrap">
           {(["all", "critical", "moderate", "minor"] as SeverityFilter[]).map((s) => (
             <Button
@@ -106,7 +106,7 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
       {/* Section filter — only shown when errors span 2+ sections */}
       {activeSections.length >= 2 && (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">By Section</p>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Section</p>
           <div className="flex gap-2 flex-wrap">
             <Button
               variant={sectionFilter === "all" ? "default" : "outline"}
@@ -114,7 +114,7 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
               className="text-xs h-7"
               onClick={() => setSectionFilter("all")}
             >
-              All Sections
+              All sections
             </Button>
             {activeSections.map((section) => (
               <Button
@@ -138,7 +138,7 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
       <div className="space-y-3">
         {filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
-            No errors match the current filters.
+            Nothing matches these filters.
           </p>
         ) : (
           filtered.map((error) => (

@@ -11,19 +11,20 @@ export function HeroSection() {
           Does your resume pass?
         </h1>
         <p className="text-lg sm:text-xl text-muted-foreground max-w-xl mx-auto leading-relaxed">
-          ATS score, line-by-line fixes, and a skills gap analysis in seconds.
+          The score an ATS would give it, the lines that hurt it, and the
+          skills it&apos;s missing.
         </p>
         <div className="pt-2">
           <Link
             href="/analyze"
             className={cn(buttonVariants({ size: "lg" }), "px-8 text-base gap-2")}
           >
-            Analyze My Resume
+            Analyze my resume
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
         <p className="text-xs text-muted-foreground">
-          Free · Your API key never leaves your browser · No account required
+          Free · No account · Nothing stored server-side
         </p>
       </div>
     </section>

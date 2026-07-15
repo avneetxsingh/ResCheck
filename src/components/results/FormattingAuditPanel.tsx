@@ -17,17 +17,17 @@ const CATEGORIES: { key: keyof Omit<FormattingAudit, "is_clean">; label: string;
   },
   {
     key: "bold_inconsistencies",
-    label: "Bold / Italic",
+    label: "Bold / italic",
     description: "Company names, job titles, or school names bolded inconsistently",
   },
   {
     key: "bullet_inconsistencies",
-    label: "Bullet Style",
+    label: "Bullets",
     description: "Mixed bullet characters, inconsistent period endings, indentation",
   },
   {
     key: "date_format_issues",
-    label: "Date Formats",
+    label: "Dates",
     description: "Mixed formats across roles (Jan 2023 vs January 2023 vs 01/2023)",
   },
   {
@@ -109,16 +109,16 @@ export function FormattingAuditPanel({ audit, atsExtraction }: FormattingAuditPa
             <AlertTriangle className="w-4 h-4 text-amber-500" />
           )}
           <h3 className="text-sm font-semibold">
-            Formatting Audit
+            Formatting
           </h3>
         </div>
         {totalIssues > 0 ? (
           <span className="text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
-            {totalIssues} inconsistenc{totalIssues === 1 ? "y" : "ies"}
+            {totalIssues} to fix
           </span>
         ) : (
           <span className="text-xs font-medium text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
-            All clear
+            Clean
           </span>
         )}
       </div>

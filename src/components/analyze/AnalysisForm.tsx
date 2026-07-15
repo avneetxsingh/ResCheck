@@ -59,7 +59,7 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         <div className="space-y-2">
-          <p className="text-sm font-medium">Resume <span className="text-red-600 dark:text-red-400">*</span></p>
+          <p className="text-sm font-medium">Resume</p>
           <ResumeUploader
             file={file}
             onFileAccepted={(f) => { setFile(f); setFileError(null); }}
@@ -98,16 +98,16 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
       )}
 
       <Button type="submit" size="lg" disabled={!canSubmit} className="w-full gap-2">
-        {isRunning ? "Analyzing…" : "Analyze My Resume"}
+        {isRunning ? "Analyzing…" : "Analyze"}
       </Button>
 
       {!canSubmit && !isRunning && hydrated && (
         <p className="text-xs text-center text-muted-foreground">
           {!hasKey
-            ? "Add your Groq API key in Settings to get started"
+            ? "Add your Groq API key in Settings first"
             : !file
-            ? "Upload your resume PDF"
-            : "Add a job description"}
+            ? "Add your resume to continue"
+            : "Paste a job description to continue"}
         </p>
       )}
     </form>
