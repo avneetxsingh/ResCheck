@@ -47,9 +47,9 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
         <CheckCircle2 className="w-12 h-12 text-green-500" />
-        <p className="text-lg font-medium">No errors found</p>
+        <p className="text-lg font-medium">No writing issues</p>
         <p className="text-sm text-muted-foreground max-w-sm">
-          Your resume is clean! The AI found no grammar, spelling, or formatting issues.
+          The line-by-line audit came back clean — nothing to flag.
         </p>
       </div>
     );
@@ -58,30 +58,31 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
   return (
     <div className="space-y-4">
       {/* Summary bar */}
-      <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/40 flex-wrap">
-        <span className="text-sm font-medium">{errors.length} issues found</span>
-        <div className="flex items-center gap-2 flex-wrap">
-          {counts.critical > 0 && (
-            <span className="text-xs bg-red-500/10 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-medium">
-              {counts.critical} critical
-            </span>
-          )}
-          {counts.moderate > 0 && (
-            <span className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full font-medium">
-              {counts.moderate} moderate
-            </span>
-          )}
-          {counts.minor > 0 && (
-            <span className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
-              {counts.minor} minor
-            </span>
-          )}
-        </div>
+      <div className="flex items-center gap-4 flex-wrap text-sm">
+        <span className="font-medium">{errors.length} issues found</span>
+        {counts.critical > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+            {counts.critical} critical
+          </span>
+        )}
+        {counts.moderate > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            {counts.moderate} moderate
+          </span>
+        )}
+        {counts.minor > 0 && (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            {counts.minor} minor
+          </span>
+        )}
       </div>
 
       {/* Severity filter */}
       <div className="space-y-2">
-        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">By Severity</p>
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Severity</p>
         <div className="flex gap-2 flex-wrap">
           {(["all", "critical", "moderate", "minor"] as SeverityFilter[]).map((s) => (
             <Button
@@ -105,7 +106,7 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
       {/* Section filter — only shown when errors span 2+ sections */}
       {activeSections.length >= 2 && (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">By Section</p>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Section</p>
           <div className="flex gap-2 flex-wrap">
             <Button
               variant={sectionFilter === "all" ? "default" : "outline"}
@@ -113,7 +114,7 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
               className="text-xs h-7"
               onClick={() => setSectionFilter("all")}
             >
-              All Sections
+              All sections
             </Button>
             {activeSections.map((section) => (
               <Button
@@ -137,7 +138,7 @@ export function ErrorReportPanel({ errors }: ErrorReportPanelProps) {
       <div className="space-y-3">
         {filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
-            No errors match the current filters.
+            Nothing matches these filters.
           </p>
         ) : (
           filtered.map((error) => (

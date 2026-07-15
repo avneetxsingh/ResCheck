@@ -1,21 +1,29 @@
 "use client";
 
-import { CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AnalysisStage } from "@/hooks/useAnalysis";
 
-interface Step {
-  label: string;
-  activeStage: AnalysisStage;
-  completedAfter: AnalysisStage[];
-}
+const STEPS = [
+  "Reading your PDF",
+  "Extracting resume structure",
+  "Matching skills from the job description",
+  "Auditing writing line by line",
+  "Computing scores",
+  "Writing your summary",
+] as const;
 
-const STEPS: Step[] = [
-  { label: "Reading your PDF", activeStage: "parsing", completedAfter: ["analyzing", "complete"] },
-  { label: "Extracting text", activeStage: "parsing", completedAfter: ["analyzing", "complete"] },
-  { label: "AI analyzing resume", activeStage: "analyzing", completedAfter: ["complete"] },
-  { label: "Generating report", activeStage: "analyzing", completedAfter: ["complete"] },
-];
+// SSE `progress` → index of the active row. 35 is the client-set value at
+// analyze start, before the first server stage event lands.
+const PROGRESS_TO_STEP: Record<number, number> = {
+  35: 1, // analyzing started, first server event pending
+  10: 1, // extracting
+  25: 2, // skills
+  50: 3, // errors
+  70: 4, // scoring
+  85: 5, // summary
+};
 
 interface ProgressStreamProps {
   stage: AnalysisStage;
@@ -23,58 +31,54 @@ interface ProgressStreamProps {
 }
 
 export function ProgressStream({ stage, progress }: ProgressStreamProps) {
-  if (stage === "idle" || stage === "complete") return null;
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    if (stage === "parsing") {
+      setActiveStep(0);
+      return;
+    }
+    if (stage === "analyzing") {
+      const mapped = PROGRESS_TO_STEP[progress];
+      // Monotonic: never move backwards even if values arrive oddly
+      if (mapped !== undefined) setActiveStep((s) => Math.max(s, mapped));
+    }
+  }, [stage, progress]);
+
+  if (stage === "idle" || stage === "complete" || stage === "error") return null;
 
   return (
-    <div className="rounded-lg border bg-card p-6 space-y-4">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-medium">Analyzing your resume...</p>
-        <span className="text-sm text-muted-foreground tabular-nums">{progress}%</span>
-      </div>
-
-      {/* Progress bar */}
-      <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-        <div
-          className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-
-      {/* Steps */}
-      <ul className="space-y-3 pt-2">
-        {STEPS.map((step, i) => {
-          const isComplete = step.completedAfter.includes(stage);
-          const isActive = step.activeStage === stage && !isComplete;
+    <div role="status" aria-live="polite" className="rounded-xl border border-border/50 bg-card p-5">
+      <ul className="space-y-3">
+        {STEPS.map((label, i) => {
+          const isDone = i < activeStep;
+          const isActive = i === activeStep;
 
           return (
-            <li key={i} className="flex items-center gap-3 text-sm">
-              {isComplete ? (
-                <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-              ) : isActive ? (
-                <Loader2 className="w-4 h-4 text-indigo-500 animate-spin shrink-0" />
-              ) : (
-                <Circle className="w-4 h-4 text-muted-foreground/40 shrink-0" />
-              )}
+            <li key={label} className="flex items-center gap-3 text-sm">
+              <span className="w-4 shrink-0 flex items-center justify-center">
+                {isDone ? (
+                  <Check className="w-4 h-4 text-primary" />
+                ) : isActive ? (
+                  <Loader2 className="w-4 h-4 text-muted-foreground animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <span className="w-1 h-1 rounded-full bg-muted-foreground/40" />
+                )}
+              </span>
               <span
                 className={cn(
-                  "transition-colors",
-                  isComplete && "text-green-500",
+                  "transition-colors duration-200",
+                  isDone && "text-muted-foreground",
                   isActive && "text-foreground font-medium",
-                  !isComplete && !isActive && "text-muted-foreground/60"
+                  !isDone && !isActive && "text-muted-foreground/50"
                 )}
               >
-                {step.label}
+                {label}
               </span>
             </li>
           );
         })}
       </ul>
-
-      {stage === "analyzing" && (
-        <p className="text-xs text-muted-foreground pt-1">
-          Powered by llama-3.1-8b-instant via Groq — this usually takes 3-8 seconds
-        </p>
-      )}
     </div>
   );
 }

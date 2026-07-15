@@ -17,11 +17,11 @@ export default function AnalyzePage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold">Analyze Your Resume</h1>
-        <p className="text-muted-foreground mt-1">
-          Get an AI-powered ATS score, skill gap analysis, and line-by-line fixes in seconds.
+        <h1 className="text-2xl font-semibold tracking-tight">Analyze</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Paste the job description, drop your resume, and get your report.
         </p>
       </div>
       <AnalysisForm onResult={setResult} />

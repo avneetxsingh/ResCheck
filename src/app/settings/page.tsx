@@ -4,9 +4,9 @@ export default function SettingsPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold">Settings</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-1">
-          Configure your API key, model, and analysis prompt.
+          Your Groq key and model choice. Everything stays in this browser.
         </p>
       </div>
       <SettingsPanel />

@@ -85,11 +85,25 @@ export interface FormattingAudit {
   is_clean: boolean;                 // true only if ALL arrays are empty
 }
 
+export interface AtsContactInfo {
+  email: string | null;
+  phone: string | null;
+  links: string[];
+}
+
+export interface AtsExtraction {
+  sections_detected: string[]; // canonical ResumeSection names with a real heading found
+  contact: AtsContactInfo;
+  warnings: string[]; // parse warnings: garbled chars, missing contact, no headings
+}
+
 export interface AnalysisResult {
   scorecard: Scorecard;
   skills_gap: SkillsGapAnalysis;
   errors: LineError[];
   formatting_audit?: FormattingAudit; // optional — absent in pre-existing history entries
+  ats_extraction?: AtsExtraction; // optional — absent in pre-v2 history entries
+  warnings?: string[]; // degraded-stage warnings — absent in pre-v2 history entries
   summary: ExecutiveSummary;
   metadata: {
     model: string;
@@ -98,6 +112,7 @@ export interface AnalysisResult {
     jd_word_count: number;
     jd_quality?: "rich" | "moderate" | "sparse"; // optional — absent in pre-existing history entries
     total_errors_found: number;
+    pipeline_version?: number; // 2 for the SSE multi-pass pipeline; absent pre-v2
   };
 }
 
@@ -107,6 +122,8 @@ export interface RawAnalysisResult {
   skills_gap: SkillsGapAnalysis;
   errors: Omit<LineError, "id">[];
   formatting_audit: FormattingAudit;
+  ats_extraction?: AtsExtraction;
+  warnings?: string[];
   summary: ExecutiveSummary;
   metadata: Omit<AnalysisResult["metadata"], "analyzed_at">;
 }

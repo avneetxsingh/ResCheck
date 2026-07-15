@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Sparkles, AlertCircle, Settings } from "lucide-react";
+import { AlertCircle, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ResumeUploader } from "./ResumeUploader";
 import { JobDescriptionInput } from "./JobDescriptionInput";
@@ -22,7 +21,7 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [jobDescription, setJobDescription] = useState("");
-  const { stage, progress, result, error, analyze } = useAnalysis(settings.apiKey);
+  const { stage, progress, result, error, warnings, analyze } = useAnalysis(settings.apiKey);
 
   const reportedRef = useRef<AnalysisResult | null>(null);
   useEffect(() => {
@@ -44,13 +43,12 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* API key status */}
       {hydrated && !hasKey && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription className="flex items-center gap-2">
             No Groq API key set.{" "}
-            <Link href="/settings" className="font-medium text-indigo-600 hover:underline inline-flex items-center gap-1">
+            <Link href="/settings" className="font-medium text-primary hover:underline inline-flex items-center gap-1">
               <Settings className="w-3.5 h-3.5" />
               Open Settings
             </Link>{" "}
@@ -59,11 +57,9 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
         </Alert>
       )}
 
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base">1. Upload Resume</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Resume</p>
           <ResumeUploader
             file={file}
             onFileAccepted={(f) => { setFile(f); setFileError(null); }}
@@ -71,24 +67,28 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
             onClear={() => setFile(null)}
           />
           {fileError && (
-            <p className="text-sm text-red-500 mt-2 flex items-center gap-1.5">
+            <p className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1.5">
               <AlertCircle className="w-3.5 h-3.5" />
               {fileError}
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base">2. Job Description</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <JobDescriptionInput value={jobDescription} onChange={setJobDescription} />
-        </CardContent>
-      </Card>
+        <JobDescriptionInput value={jobDescription} onChange={setJobDescription} />
+      </div>
 
       {isRunning && <ProgressStream stage={stage} progress={progress} />}
+
+      {isRunning && warnings.length > 0 && (
+        <ul className="space-y-1">
+          {warnings.map((w, i) => (
+            <li key={i} className="text-xs text-amber-600 dark:text-amber-400 flex gap-1.5">
+              <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+              {w}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {stage === "error" && error && (
         <Alert variant="destructive">
@@ -97,23 +97,17 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
         </Alert>
       )}
 
-      <Button
-        type="submit"
-        size="lg"
-        disabled={!canSubmit}
-        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
-      >
-        <Sparkles className="w-4 h-4" />
-        {isRunning ? "Analyzing..." : "Analyze My Resume"}
+      <Button type="submit" size="lg" disabled={!canSubmit} className="w-full gap-2">
+        {isRunning ? "Analyzing…" : "Analyze"}
       </Button>
 
       {!canSubmit && !isRunning && hydrated && (
         <p className="text-xs text-center text-muted-foreground">
           {!hasKey
-            ? "Add your Groq API key in Settings to get started"
+            ? "Add your Groq API key in Settings first"
             : !file
-            ? "Upload your resume PDF"
-            : "Add a job description"}
+            ? "Add your resume to continue"
+            : "Paste a job description to continue"}
         </p>
       )}
     </form>

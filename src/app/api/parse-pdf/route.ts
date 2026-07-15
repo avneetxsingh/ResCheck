@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
     if (!result.text || result.text.length < 50) {
       return NextResponse.json<ApiError>(
-        { error: "Could not extract meaningful text from this PDF. Try a text-based PDF.", code: "PARSE_FAILED" },
+        { error: "This PDF has no readable text — it's probably a scan or an image export. Re-export it from your editor as a text PDF.", code: "PARSE_FAILED" },
         { status: 422 }
       );
     }
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[parse-pdf]", err);
     return NextResponse.json<ApiError>(
-      { error: "Failed to parse PDF.", code: "PARSE_FAILED" },
+      { error: "Couldn't read this PDF. Re-export it and try again.", code: "PARSE_FAILED" },
       { status: 500 }
     );
   }

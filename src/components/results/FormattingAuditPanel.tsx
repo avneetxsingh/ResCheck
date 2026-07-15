@@ -1,11 +1,12 @@
 "use client";
 
 import { CheckCircle2, AlertTriangle, Minus } from "lucide-react";
-import type { FormattingAudit } from "@/types/analysis";
+import type { FormattingAudit, AtsExtraction } from "@/types/analysis";
 import { cn } from "@/lib/utils";
 
 interface FormattingAuditPanelProps {
   audit: FormattingAudit;
+  atsExtraction?: AtsExtraction;
 }
 
 const CATEGORIES: { key: keyof Omit<FormattingAudit, "is_clean">; label: string; description: string }[] = [
@@ -16,17 +17,17 @@ const CATEGORIES: { key: keyof Omit<FormattingAudit, "is_clean">; label: string;
   },
   {
     key: "bold_inconsistencies",
-    label: "Bold / Italic",
+    label: "Bold / italic",
     description: "Company names, job titles, or school names bolded inconsistently",
   },
   {
     key: "bullet_inconsistencies",
-    label: "Bullet Style",
+    label: "Bullets",
     description: "Mixed bullet characters, inconsistent period endings, indentation",
   },
   {
     key: "date_format_issues",
-    label: "Date Formats",
+    label: "Dates",
     description: "Mixed formats across roles (Jan 2023 vs January 2023 vs 01/2023)",
   },
   {
@@ -41,11 +42,64 @@ const CATEGORIES: { key: keyof Omit<FormattingAudit, "is_clean">; label: string;
   },
 ];
 
-export function FormattingAuditPanel({ audit }: FormattingAuditPanelProps) {
+export function FormattingAuditPanel({ audit, atsExtraction }: FormattingAuditPanelProps) {
   const totalIssues = CATEGORIES.reduce((sum, { key }) => sum + audit[key].length, 0);
 
   return (
     <div className="space-y-3">
+      {/* What the ATS sees — only for pipeline v2 results */}
+      {atsExtraction && (
+        <div className="rounded-lg border p-4 space-y-3">
+          <h3 className="text-sm font-semibold">What the ATS sees</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {atsExtraction.sections_detected.map((s) => (
+              <span
+                key={s}
+                className="text-xs font-medium bg-muted text-muted-foreground border border-border/50 px-2 py-0.5 rounded-full capitalize"
+              >
+                {s}
+              </span>
+            ))}
+            {atsExtraction.sections_detected.length === 0 && (
+              <span className="text-xs text-muted-foreground">No sections detected</span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+            {(
+              [
+                ["Email", atsExtraction.contact.email],
+                ["Phone", atsExtraction.contact.phone],
+                ["Links", atsExtraction.contact.links.length > 0 ? `${atsExtraction.contact.links.length} found` : null],
+              ] as const
+            ).map(([label, value]) => (
+              <div key={label} className="flex items-center gap-2">
+                {value ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                )}
+                <span className="text-xs">
+                  <span className="font-medium">{label}:</span>{" "}
+                  <span className={value ? "text-muted-foreground" : "text-amber-600 dark:text-amber-400"}>
+                    {value ?? "not found"}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+          {atsExtraction.warnings.length > 0 && (
+            <ul className="space-y-1">
+              {atsExtraction.warnings.map((w, i) => (
+                <li key={i} className="text-xs text-amber-600 dark:text-amber-400 flex gap-1.5">
+                  <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                  {w}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -55,16 +109,16 @@ export function FormattingAuditPanel({ audit }: FormattingAuditPanelProps) {
             <AlertTriangle className="w-4 h-4 text-amber-500" />
           )}
           <h3 className="text-sm font-semibold">
-            Formatting Audit
+            Formatting
           </h3>
         </div>
         {totalIssues > 0 ? (
           <span className="text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
-            {totalIssues} inconsistenc{totalIssues === 1 ? "y" : "ies"}
+            {totalIssues} to fix
           </span>
         ) : (
           <span className="text-xs font-medium text-green-600 dark:text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
-            All clear
+            Clean
           </span>
         )}
       </div>

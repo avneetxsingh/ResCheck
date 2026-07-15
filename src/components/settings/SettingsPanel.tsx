@@ -1,25 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Lock, CheckCircle2, ExternalLink, RotateCcw, Save, Trash2, AlertTriangle } from "lucide-react";
+import { Eye, EyeOff, Lock, CheckCircle2, ExternalLink, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useSettings } from "@/hooks/useSettings";
 import { useHistory } from "@/hooks/useHistory";
 import { GROQ_MODELS } from "@/lib/groq";
+import { JD_SKILLS_PROMPT, LINE_AUDIT_PROMPT, SUMMARY_PROMPT } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
 
 export function SettingsPanel() {
-  const { settings, saveSettings, resetPrompt, resetAll, hydrated, isPromptCustomized, defaults } = useSettings();
+  const { settings, saveSettings, resetAll, hydrated, defaults } = useSettings();
   const { history: entries, clearAll } = useHistory();
 
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [model, setModel] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState("");
   const [saved, setSaved] = useState(false);
   const [confirmClearHistory, setConfirmClearHistory] = useState(false);
   const [confirmResetAll, setConfirmResetAll] = useState(false);
@@ -29,25 +27,16 @@ export function SettingsPanel() {
     if (hydrated) {
       setApiKey(settings.apiKey);
       setModel(settings.model);
-      setSystemPrompt(settings.systemPrompt);
     }
   }, [hydrated, settings]);
 
   const isValidKey = apiKey.startsWith("gsk_") && apiKey.length > 20;
-  const hasUnsavedChanges =
-    apiKey !== settings.apiKey ||
-    model !== settings.model ||
-    systemPrompt !== settings.systemPrompt;
+  const hasUnsavedChanges = apiKey !== settings.apiKey || model !== settings.model;
 
   const handleSave = () => {
-    saveSettings({ apiKey, model, systemPrompt });
+    saveSettings({ apiKey, model });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
-
-  const handleResetPrompt = () => {
-    setSystemPrompt(defaults.systemPrompt);
-    resetPrompt();
   };
 
   const handleClearHistory = () => {
@@ -59,7 +48,6 @@ export function SettingsPanel() {
     resetAll();
     setApiKey("");
     setModel(defaults.model);
-    setSystemPrompt(defaults.systemPrompt);
     setConfirmResetAll(false);
   };
 
@@ -68,14 +56,15 @@ export function SettingsPanel() {
   return (
     <div className="space-y-6">
       {/* API Key */}
-      <Card>
+      <Card className="border-border/50 shadow-none">
         <CardHeader className="pb-4">
           <CardTitle className="text-base flex items-center gap-2">
             <Lock className="w-4 h-4 text-muted-foreground" />
-            Groq API Key
+            Groq API key
           </CardTitle>
           <CardDescription>
-            Stored only in your browser. Never sent to our servers.
+            Saved to this browser&apos;s localStorage and sent straight to Groq
+            with each analysis — there&apos;s no server to store it on.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -87,12 +76,12 @@ export function SettingsPanel() {
               placeholder="gsk_..."
               className={cn(
                 "pr-20 font-mono text-sm",
-                isValidKey && "border-green-500 focus-visible:ring-green-500"
+                isValidKey && "border-primary focus-visible:ring-primary"
               )}
               autoComplete="off"
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-              {isValidKey && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
+              {isValidKey && <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />}
               <Button
                 type="button"
                 variant="ghost"
@@ -110,7 +99,7 @@ export function SettingsPanel() {
               href="https://console.groq.com/keys"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-0.5 text-indigo-500 hover:underline"
+              className="inline-flex items-center gap-0.5 text-primary hover:underline"
             >
               Get a free Groq API key
               <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
@@ -120,10 +109,12 @@ export function SettingsPanel() {
       </Card>
 
       {/* Model */}
-      <Card>
+      <Card className="border-border/50 shadow-none">
         <CardHeader className="pb-4">
           <CardTitle className="text-base">Model</CardTitle>
-          <CardDescription>Choose which Groq model to use for analysis.</CardDescription>
+          <CardDescription>
+            The default is the fastest; the larger ones catch subtler writing issues.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-2">
@@ -133,7 +124,7 @@ export function SettingsPanel() {
                 className={cn(
                   "flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors",
                   model === m.id
-                    ? "border-indigo-500 bg-indigo-500/5"
+                    ? "border-primary bg-primary/5"
                     : "border-border hover:bg-muted/40"
                 )}
               >
@@ -144,7 +135,7 @@ export function SettingsPanel() {
                     value={m.id}
                     checked={model === m.id}
                     onChange={() => setModel(m.id)}
-                    className="accent-indigo-600"
+                    className="accent-primary"
                   />
                   <div>
                     <p className="text-sm font-medium">{m.label}</p>
@@ -160,43 +151,31 @@ export function SettingsPanel() {
         </CardContent>
       </Card>
 
-      {/* System Prompt */}
-      <Card>
+      {/* Analysis Prompts (read-only) */}
+      <Card className="border-border/50 shadow-none">
         <CardHeader className="pb-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <CardTitle className="text-base">System Prompt</CardTitle>
-              <CardDescription className="mt-1">
-                Controls how the AI analyzes your resume. Edit to change scoring behavior or output focus.
-              </CardDescription>
-            </div>
-            {isPromptCustomized && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5 text-xs"
-                onClick={handleResetPrompt}
-              >
-                <RotateCcw className="w-3 h-3" />
-                Reset to default
-              </Button>
-            )}
-          </div>
+          <CardTitle className="text-base">Prompts</CardTitle>
+          <CardDescription className="mt-1">
+            The three prompts the analysis runs on, if you&apos;re curious. They live
+            on the server and aren&apos;t editable — scores are computed in code, not
+            by the model.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Textarea
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            className="font-mono text-xs min-h-64 resize-y"
-            spellCheck={false}
-          />
-          {isPromptCustomized && systemPrompt === settings.systemPrompt && (
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-2 flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" />
-              Custom prompt active
-            </p>
-          )}
+        <CardContent className="space-y-3">
+          {[
+            { name: "JD skill extraction", prompt: JD_SKILLS_PROMPT },
+            { name: "Resume writing audit", prompt: LINE_AUDIT_PROMPT },
+            { name: "Executive summary", prompt: SUMMARY_PROMPT },
+          ].map(({ name, prompt }) => (
+            <details key={name} className="rounded-lg border">
+              <summary className="cursor-pointer px-3 py-2 text-sm font-medium hover:bg-muted/40 rounded-lg">
+                {name}
+              </summary>
+              <pre className="px-3 pb-3 pt-1 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words">
+                {prompt}
+              </pre>
+            </details>
+          ))}
         </CardContent>
       </Card>
 
@@ -206,7 +185,7 @@ export function SettingsPanel() {
           type="button"
           onClick={handleSave}
           disabled={!hasUnsavedChanges && !saved}
-          className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+          className="gap-2"
         >
           {saved ? (
             <>
@@ -216,27 +195,29 @@ export function SettingsPanel() {
           ) : (
             <>
               <Save className="w-4 h-4" />
-              Save Settings
+              Save
             </>
           )}
         </Button>
         {hasUnsavedChanges && (
-          <p className="text-xs text-muted-foreground">You have unsaved changes</p>
+          <p className="text-xs text-muted-foreground">Unsaved changes</p>
         )}
       </div>
 
       {/* Danger zone */}
-      <Card className="border-destructive/30">
+      <Card className="border-destructive/30 shadow-none">
         <CardHeader className="pb-4">
-          <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
+          <CardTitle className="text-base text-destructive">Danger zone</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Clear history */}
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium">Clear Analysis History</p>
+              <p className="text-sm font-medium">Clear history</p>
               <p className="text-xs text-muted-foreground">
-                Removes all {entries.length} saved analyses from your browser.
+                {entries.length === 1
+                  ? "Deletes the 1 saved analysis. There's no undo."
+                  : `Deletes all ${entries.length} saved analyses. There's no undo.`}
               </p>
             </div>
             {confirmClearHistory ? (
@@ -258,7 +239,7 @@ export function SettingsPanel() {
                 disabled={entries.length === 0}
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Clear History
+                Clear history
               </Button>
             )}
           </div>
@@ -268,9 +249,9 @@ export function SettingsPanel() {
           {/* Reset all */}
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium">Reset All Settings</p>
+              <p className="text-sm font-medium">Reset everything</p>
               <p className="text-xs text-muted-foreground">
-                Clears your API key, resets model and prompt to defaults.
+                Removes your API key and puts the model back to the default.
               </p>
             </div>
             {confirmResetAll ? (
@@ -291,7 +272,7 @@ export function SettingsPanel() {
                 onClick={() => setConfirmResetAll(true)}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                Reset All
+                Reset
               </Button>
             )}
           </div>

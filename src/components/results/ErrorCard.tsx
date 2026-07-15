@@ -15,32 +15,26 @@ interface ErrorCardProps {
 const SEVERITY_STYLES = {
   critical: "border-l-red-500",
   moderate: "border-l-amber-500",
-  minor: "border-l-blue-400",
-};
-
-const SEVERITY_BADGE = {
-  critical: "bg-red-500/10 text-red-600 dark:text-red-400",
-  moderate: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  minor: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  minor: "border-l-blue-500",
 };
 
 const ERROR_TYPE_LABELS: Record<string, string> = {
   grammar: "Grammar",
   spelling: "Spelling",
   punctuation: "Punctuation",
-  weak_verb: "Weak Verb",
-  passive_voice: "Passive Voice",
-  quantification_missing: "No Metrics",
-  vague_language: "Vague Language",
-  keyword_missing: "Missing Keyword",
+  weak_verb: "Weak verb",
+  passive_voice: "Passive voice",
+  quantification_missing: "No metrics",
+  vague_language: "Vague wording",
+  keyword_missing: "Missing keyword",
   formatting: "Formatting",
-  ats_unfriendly: "ATS Unfriendly",
+  ats_unfriendly: "ATS-unfriendly",
   redundancy: "Redundancy",
-  tense_inconsistency: "Tense Issue",
-  extra_whitespace: "Extra Space",
-  inconsistent_bold: "Bold Inconsistency",
-  inconsistent_bullets: "Bullet Inconsistency",
-  date_format: "Date Format",
+  tense_inconsistency: "Tense",
+  extra_whitespace: "Extra space",
+  inconsistent_bold: "Inconsistent bold",
+  inconsistent_bullets: "Inconsistent bullets",
+  date_format: "Date format",
   capitalization_inconsistency: "Capitalization",
 };
 
@@ -55,7 +49,7 @@ export function ErrorCard({ error }: ErrorCardProps) {
   };
 
   return (
-    <div className={cn("rounded-lg border border-l-4 bg-card overflow-hidden", SEVERITY_STYLES[error.severity])}>
+    <div className={cn("rounded-lg border border-border/50 border-l-2 bg-card overflow-hidden", SEVERITY_STYLES[error.severity])}>
       {/* Header */}
       <button
         className="w-full flex items-start gap-3 p-4 text-left hover:bg-muted/30 transition-colors"
@@ -63,7 +57,12 @@ export function ErrorCard({ error }: ErrorCardProps) {
       >
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full", SEVERITY_BADGE[error.severity])}>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium capitalize">
+              <span className={cn("w-1.5 h-1.5 rounded-full", {
+                critical: "bg-red-500",
+                moderate: "bg-amber-500",
+                minor: "bg-blue-500",
+              }[error.severity])} />
               {error.severity}
             </span>
             <Badge variant="outline" className="text-xs">
@@ -96,7 +95,7 @@ export function ErrorCard({ error }: ErrorCardProps) {
             {copied ? (
               <>
                 <Check className="w-3.5 h-3.5 text-green-500" />
-                Copied!
+                Copied
               </>
             ) : (
               <>

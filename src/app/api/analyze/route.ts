@@ -1,37 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createGroqClient, GROQ_MODEL, ALLOWED_MODELS } from "@/lib/groq";
-import { SYSTEM_PROMPT, buildUserPrompt } from "@/lib/prompts";
-import type { ApiError, AnalyzeResponse } from "@/types/api";
+import {
+  JD_SKILLS_PROMPT, LINE_AUDIT_PROMPT, SUMMARY_PROMPT,
+  buildJdSkillsUserPrompt, buildLineAuditUserPrompt, buildSummaryUserPrompt,
+} from "@/lib/prompts";
+import { extractResumeStructure, toAtsExtraction, buildSectionizedText, sectionNames } from "@/lib/ats-extract";
+import { runFormattingAudit } from "@/lib/formatting-audit";
+import { buildSkills, extractBonusSkills, clipJd } from "@/lib/keyword-match";
+import { computeScores, buildFallbackSummary, AUDIT_KEYS } from "@/lib/scoring";
+import type { ApiError } from "@/types/api";
+import type { RawAnalysisResult } from "@/types/analysis";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// --- Request body schema ---
+// ── Request body ───────────────────────────────────────────────────────────
+// system_prompt is no longer accepted; zod strips unknown keys so old cached
+// clients that still send it are unaffected.
 const BodySchema = z.object({
   resume_text: z.string().min(100, "Resume text too short"),
   job_description: z.string().min(1, "Job description cannot be empty"),
   model: z
     .string()
     .optional()
-    .refine(
-      (v) => v === undefined || ALLOWED_MODELS.has(v),
-      { message: "Unknown model ID. Use a supported Groq model." }
-    ),
-  system_prompt: z.string().optional(),
+    .refine((v) => v === undefined || ALLOWED_MODELS.has(v), {
+      message: "Unknown model ID. Use a supported Groq model.",
+    }),
 });
 
-// --- Zod schemas for deep AI response validation ---
-// Every field AND every sub-object has a .catch() — safeParse is literally impossible to fail.
+// ── Input budgets ──────────────────────────────────────────────────────────
+// Free tier is 6,000 tokens/min on the default model. Explicit budgets, not
+// magic slices: ~4 chars/token.
+const RESUME_BUDGET_CHARS = 12_000; // ~3.0K tokens (AI-2 only)
+const JD_BUDGET_CHARS = 4_000; //     ~1.0K tokens (AI-1 only)
 
-const DEFAULT_METRIC = { score: 0, label: "", rationale: "", improvement_tip: "" } as const;
-
-const ScorecardMetricSchema = z.object({
-  score: z.number().catch(0).transform((n) => Math.min(100, Math.max(0, Math.round(n)))),
-  label: z.string().catch(""),
-  rationale: z.string().catch(""),
-  improvement_tip: z.string().catch(""),
-}).catch(DEFAULT_METRIC);
+// ── Per-stage Zod schemas — every field and sub-object catches ────────────
+const JdSkillsSchema = z
+  .object({
+    job_title: z.string().catch(""),
+    must_have: z.array(z.string()).catch([]).transform((a) => a.map((s) => s.trim()).filter(Boolean).slice(0, 15)),
+    nice_to_have: z.array(z.string()).catch([]).transform((a) => a.map((s) => s.trim()).filter(Boolean).slice(0, 10)),
+    jd_quality: z.enum(["rich", "moderate", "sparse"]).catch("moderate"),
+  })
+  .catch({ job_title: "", must_have: [], nice_to_have: [], jd_quality: "moderate" });
+type JdSkills = z.infer<typeof JdSkillsSchema>;
 
 const ERROR_TYPES = [
   "grammar", "spelling", "punctuation", "weak_verb", "passive_voice",
@@ -45,19 +58,6 @@ const RESUME_SECTIONS = [
   "contact", "summary", "experience", "education",
   "skills", "projects", "certifications", "other",
 ] as const;
-
-const SkillSchema = z.object({
-  name: z.string().catch(""),
-  present_in_resume: z.boolean().catch(false),
-  category: z.string()
-    .transform((s) => s.toLowerCase())
-    .pipe(z.enum(["technical", "soft", "domain", "tool"]))
-    .catch("technical"),
-  match_strength: z.string()
-    .transform((s) => s.toLowerCase())
-    .pipe(z.enum(["exact", "partial", "missing"]))
-    .catch("missing"),
-});
 
 const LineErrorSchema = z.object({
   original_line: z.string().catch(""),
@@ -74,172 +74,99 @@ const LineErrorSchema = z.object({
   severity: z.enum(["critical", "moderate", "minor"]).catch("minor"),
 });
 
-const FormattingAuditSchema = z.object({
-  whitespace_issues: z.array(z.string()).catch([]),
-  bold_inconsistencies: z.array(z.string()).catch([]),
-  bullet_inconsistencies: z.array(z.string()).catch([]),
-  date_format_issues: z.array(z.string()).catch([]),
-  capitalization_issues: z.array(z.string()).catch([]),
-  other_inconsistencies: z.array(z.string()).catch([]),
-  is_clean: z.boolean().catch(true),
-});
+const LineErrorsSchema = z
+  .object({ errors: z.array(LineErrorSchema).catch([]).transform((a) => a.slice(0, 40)) })
+  .catch({ errors: [] });
 
-const bonusSkillsSchema = z.array(z.unknown()).catch([]).transform((arr) =>
-  arr
-    .map((item) => {
-      if (typeof item === "string") return item;
-      if (item && typeof item === "object") {
-        const obj = item as Record<string, unknown>;
-        return typeof obj.name === "string" ? obj.name : null;
-      }
-      return null;
-    })
-    .filter((s): s is string => s !== null && s.trim() !== "")
-);
-
-const DEFAULT_SCORECARD = {
-  overall_ats_score: DEFAULT_METRIC,
-  skills_match_score: DEFAULT_METRIC,
-  grammar_score: DEFAULT_METRIC,
-  formatting_score: DEFAULT_METRIC,
-  impact_score: DEFAULT_METRIC,
-  keyword_density_score: DEFAULT_METRIC,
-};
-
-const DEFAULT_AUDIT = {
-  whitespace_issues: [] as string[],
-  bold_inconsistencies: [] as string[],
-  bullet_inconsistencies: [] as string[],
-  date_format_issues: [] as string[],
-  capitalization_issues: [] as string[],
-  other_inconsistencies: [] as string[],
-  is_clean: true,
-};
-
-const AiResponseSchema = z.object({
-  scorecard: z.object({
-    overall_ats_score: ScorecardMetricSchema,
-    skills_match_score: ScorecardMetricSchema,
-    grammar_score: ScorecardMetricSchema,
-    formatting_score: ScorecardMetricSchema,
-    impact_score: ScorecardMetricSchema,
-    keyword_density_score: ScorecardMetricSchema,
-  }).catch(DEFAULT_SCORECARD),
-  skills_gap: z.object({
-    must_have: z.array(SkillSchema).catch([]),
-    nice_to_have: z.array(SkillSchema).catch([]),
-    bonus_skills: bonusSkillsSchema,
-    overall_match_percentage: z.number().catch(0)
-      .transform((n) => Math.min(100, Math.max(0, Math.round(n)))),
-  }).catch({ must_have: [], nice_to_have: [], bonus_skills: [], overall_match_percentage: 0 }),
-  errors: z.array(LineErrorSchema).catch([]),
-  formatting_audit: FormattingAuditSchema.catch(DEFAULT_AUDIT),
-  summary: z.object({
-    verdict: z.enum(["strong", "moderate", "needs_work", "critical"]).catch("moderate"),
+const SummarySchema = z
+  .object({
     headline: z.string().catch(""),
     top_strengths: z.array(z.string()).catch([]).transform((a) => a.slice(0, 3)),
     top_improvements: z.array(z.string()).catch([]).transform((a) => a.slice(0, 3)),
     tailoring_advice: z.string().catch(""),
-  }).catch({ verdict: "moderate" as const, headline: "", top_strengths: [], top_improvements: [], tailoring_advice: "" }),
-  metadata: z.object({
-    model: z.string().catch("unknown"),
-    resume_word_count: z.number().catch(0).transform(Math.round),
-    jd_word_count: z.number().catch(0).transform(Math.round),
-    jd_quality: z.enum(["rich", "moderate", "sparse"]).catch("moderate"),
-    total_errors_found: z.number().catch(0).transform(Math.round),
-  }).catch({ model: "unknown", resume_word_count: 0, jd_word_count: 0, jd_quality: "moderate" as const, total_errors_found: 0 }),
-});
+  })
+  .catch({ headline: "", top_strengths: [], top_improvements: [], tailoring_advice: "" });
 
-type AiResponse = z.infer<typeof AiResponseSchema>;
-
-// --- Shared Groq call helper (reused for retry) ---
-async function callGroq(
-  groq: ReturnType<typeof createGroqClient>,
-  model: string,
-  systemPrompt: string,
-  resumeText: string,
-  jobDescription: string,
-  temperature = 0   // 0 = greedy/deterministic; retries use 0.2 to get different output
-): Promise<{ rawText: string; actualModel: string }> {
-  const completion = await groq.chat.completions.create({
-    model,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: buildUserPrompt(resumeText, jobDescription) },
-    ],
-    response_format: { type: "json_object" },
-    temperature,
-    max_tokens: 2000,
-  });
-  const rawText = completion.choices[0]?.message?.content ?? "";
-  const actualModel = completion.model ?? model;
-  return { rawText, actualModel };
+// ── SSE helpers ────────────────────────────────────────────────────────────
+const encoder = new TextEncoder();
+function sse(event: string, data: unknown): Uint8Array {
+  return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
-// --- Parse + validate with optional retry ---
-async function parseAndValidate(
-  groq: ReturnType<typeof createGroqClient>,
-  model: string,
-  systemPrompt: string,
-  resumeText: string,
-  jobDescription: string
-): Promise<{ result: AiResponse; actualModel: string } | { error: string }> {
-  let rawText: string;
-  let actualModel: string;
+// ── Groq stage call: 25s timeout, retry once at temp 0.2, 429 retry-after ─
+type StageResult<T> =
+  | { ok: true; data: T; actualModel: string }
+  | { ok: false; reason: "auth" | "failed" };
 
-  // Attempt 1
-  try {
-    ({ rawText, actualModel } = await callGroq(groq, model, systemPrompt, resumeText, jobDescription));
-  } catch (err) {
-    throw err; // Groq SDK errors propagate to outer catch for status-code handling
-  }
-
-  if (!rawText.trim()) {
-    return { error: "AI returned an empty response." };
-  }
-
-  // JSON parse — retry once on failure (temperature 0.2 so retry differs from attempt 1)
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
+async function callStage<T>(opts: {
+  groq: ReturnType<typeof createGroqClient>;
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  schema: z.ZodType<T>;
+  maxTokens: number;
+  onWarning: (msg: string) => void;
+}): Promise<StageResult<T>> {
+  const attempt = async (temperature: number) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25_000);
     try {
-      ({ rawText, actualModel } = await callGroq(groq, model, systemPrompt, resumeText, jobDescription, 0.2));
-      parsed = JSON.parse(rawText);
-    } catch {
-      return { error: "AI returned invalid JSON after retry. Please try again." };
+      const completion = await opts.groq.chat.completions.create(
+        {
+          model: opts.model,
+          messages: [
+            { role: "system", content: opts.systemPrompt },
+            { role: "user", content: opts.userPrompt },
+          ],
+          response_format: { type: "json_object" },
+          temperature,
+          max_tokens: opts.maxTokens,
+        },
+        { signal: controller.signal }
+      );
+      return {
+        rawText: completion.choices[0]?.message?.content ?? "",
+        actualModel: completion.model ?? opts.model,
+      };
+    } finally {
+      clearTimeout(timer);
     }
-  }
+  };
 
-  // Shape validation — retry once on failure (temperature 0.2 so retry differs from attempt 1)
-  const validated = AiResponseSchema.safeParse(parsed);
-  if (!validated.success) {
+  // temperature 0 first; the retry MUST use 0.2 so it can produce different output
+  const temps = [0, 0.2];
+  for (let i = 0; i < temps.length; i++) {
     try {
-      ({ rawText, actualModel } = await callGroq(groq, model, systemPrompt, resumeText, jobDescription, 0.2));
-      const reparsed = JSON.parse(rawText);
-      const revalidated = AiResponseSchema.safeParse(reparsed);
-      if (!revalidated.success) {
-        console.error("[analyze] shape validation failed after retry:", revalidated.error.issues[0]);
-        return { error: "AI response structure was invalid after retry. Please try again." };
+      const { rawText, actualModel } = await attempt(temps[i]);
+      const parsed: unknown = JSON.parse(rawText); // schema.safeParse cannot fail; JSON.parse can
+      const validated = opts.schema.safeParse(parsed);
+      if (validated.success) return { ok: true, data: validated.data, actualModel };
+      // .catch()-everywhere means this is unreachable, but stay defensive:
+      if (i === 0) opts.onWarning("The model returned something unusable — retrying.");
+    } catch (err: unknown) {
+      const status =
+        err && typeof err === "object" ? (err as Record<string, unknown>).status : undefined;
+      if (status === 401) return { ok: false, reason: "auth" };
+      if (status === 429 && i === 0) {
+        const headers =
+          err && typeof err === "object"
+            ? ((err as Record<string, unknown>).headers as Record<string, string> | undefined)
+            : undefined;
+        const retryAfter = Number(headers?.["retry-after"] ?? NaN);
+        if (Number.isFinite(retryAfter) && retryAfter > 0 && retryAfter <= 20) {
+          opts.onWarning(`Groq is rate-limiting — pausing ${retryAfter}s, then retrying.`);
+          await new Promise((r) => setTimeout(r, retryAfter * 1000));
+          continue;
+        }
+        return { ok: false, reason: "failed" };
       }
-      return { result: revalidated.data, actualModel };
-    } catch {
-      return { error: "AI response was invalid. Please try again." };
+      if (i === 0) opts.onWarning("A model call failed — retrying once.");
     }
   }
-
-  return { result: validated.data, actualModel };
+  return { ok: false, reason: "failed" };
 }
 
-const AUDIT_KEYS = [
-  "whitespace_issues",
-  "bold_inconsistencies",
-  "bullet_inconsistencies",
-  "date_format_issues",
-  "capitalization_issues",
-  "other_inconsistencies",
-] as const;
-
+// ── Route ──────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const apiKey = req.headers.get("x-groq-api-key");
   if (!apiKey || apiKey.trim().length === 0) {
@@ -251,146 +178,172 @@ export async function POST(req: NextRequest) {
 
   let body: z.infer<typeof BodySchema>;
   try {
-    const raw = await req.json();
-    body = BodySchema.parse(raw);
+    body = BodySchema.parse(await req.json());
   } catch (err) {
     const message =
-      err instanceof z.ZodError
-        ? err.issues[0]?.message ?? "Invalid request body"
-        : "Invalid request body";
-    return NextResponse.json<ApiError>(
-      { error: message, code: "INVALID_REQUEST" },
-      { status: 400 }
-    );
+      err instanceof z.ZodError ? err.issues[0]?.message ?? "Invalid request body" : "Invalid request body";
+    return NextResponse.json<ApiError>({ error: message, code: "INVALID_REQUEST" }, { status: 400 });
   }
 
-  try {
-    const groq = createGroqClient(apiKey.trim());
-    const model = body.model ?? GROQ_MODEL;
-    // Always use the server-side SYSTEM_PROMPT — this prevents stale localStorage prompts
-    // from previous sessions overriding the current prompt. The Settings prompt editor is
-    // kept for display purposes but the server is the source of truth.
-    const systemPrompt = SYSTEM_PROMPT;
+  const groq = createGroqClient(apiKey.trim());
+  const model = body.model ?? GROQ_MODEL;
+  const resumeText = body.resume_text.slice(0, RESUME_BUDGET_CHARS);
+  // Requirements-aware clip: long postings keep their requirements section
+  // instead of losing it to head-truncation.
+  const jdText = clipJd(body.job_description, JD_BUDGET_CHARS);
 
-    // Truncate inputs to stay within the free-tier TPM limit (~6000 input tokens).
-    // System prompt ≈ 1800 tokens, leaving ~4200 tokens for resume + JD.
-    const resumeText = body.resume_text.slice(0, 12000); // ~3000 tokens
-    const jdText = body.job_description.slice(0, 4000);  // ~1000 tokens
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const warnings: string[] = [];
+      const emit = (event: string, data: unknown) => controller.enqueue(sse(event, data));
+      const warn = (message: string) => {
+        warnings.push(message);
+        emit("warning", { message });
+      };
 
-    const outcome = await parseAndValidate(
-      groq, model, systemPrompt, resumeText, jdText
-    );
+      try {
+        // Stage 1 — deterministic extraction (code, cannot fail on valid text)
+        emit("stage", { stage: "extracting", progress: 10 });
+        const structured = extractResumeStructure(resumeText);
+        const audit = runFormattingAudit(structured);
+        const atsExtraction = toAtsExtraction(structured);
 
-    if ("error" in outcome) {
-      return NextResponse.json<ApiError>(
-        { error: outcome.error, code: "INVALID_JSON" },
-        { status: 422 }
-      );
-    }
+        // Stage 2+3 — AI-1 (JD skills) ∥ AI-2 (line audit)
+        emit("stage", { stage: "skills", progress: 25 });
+        const jdPromise = callStage({
+          groq, model, systemPrompt: JD_SKILLS_PROMPT,
+          userPrompt: buildJdSkillsUserPrompt(jdText),
+          schema: JdSkillsSchema, maxTokens: 500, onWarning: warn,
+        });
+        const errorsPromise = callStage({
+          groq, model, systemPrompt: LINE_AUDIT_PROMPT,
+          userPrompt: buildLineAuditUserPrompt(buildSectionizedText(structured), sectionNames(structured)),
+          schema: LineErrorsSchema, maxTokens: 1800, onWarning: warn,
+        });
 
-    const { result, actualModel } = outcome;
+        const jdOutcome = await jdPromise;
+        emit("stage", { stage: "errors", progress: 50 });
+        const errorsOutcome = await errorsPromise;
+        emit("stage", { stage: "scoring", progress: 70 });
 
-    // ── SERVER-SIDE DETERMINISTIC SCORING ──────────────────────────────────
-    // AI outputs score=0 for all fields. These computations are the ground truth.
+        if (
+          (!jdOutcome.ok && jdOutcome.reason === "auth") ||
+          (!errorsOutcome.ok && errorsOutcome.reason === "auth")
+        ) {
+          emit("error", { error: "Invalid Groq API key. Check your key and try again.", code: "INVALID_KEY" });
+          controller.close();
+          return;
+        }
+        if (!jdOutcome.ok && !errorsOutcome.ok) {
+          emit("error", { error: "The model couldn't complete the analysis, even after retries. Try again in a minute, or switch models in Settings.", code: "UNKNOWN" });
+          controller.close();
+          return;
+        }
 
-    // 1. formatting_score — from formatting_audit issue count
-    const auditCount = AUDIT_KEYS.reduce((n, k) => n + result.formatting_audit[k].length, 0);
-    result.scorecard.formatting_score.score =
-      auditCount === 0 ? 95 :
-      auditCount <= 2  ? 82 :
-      auditCount <= 5  ? 67 :
-      auditCount <= 10 ? 50 : 35;
+        const jd: JdSkills = jdOutcome.ok
+          ? jdOutcome.data
+          : { job_title: "", must_have: [], nice_to_have: [], jd_quality: "sparse" };
+        if (!jdOutcome.ok) warn("Couldn't extract skills from the job description this run — the Skills tab will be empty.");
 
-    // 2. grammar_score — grammar/spelling/punctuation/tense errors
-    const GRAMMAR_TYPES = new Set(["grammar", "spelling", "punctuation", "tense_inconsistency"]);
-    const grammarCount = result.errors.filter(e => GRAMMAR_TYPES.has(e.error_type)).length;
-    result.scorecard.grammar_score.score =
-      grammarCount === 0 ? 95 :
-      grammarCount <= 3  ? 82 :
-      grammarCount <= 7  ? 67 : 45;
+        const errors = errorsOutcome.ok ? errorsOutcome.data.errors : [];
+        if (!errorsOutcome.ok) warn("The writing audit didn't complete — no line issues are shown, and grammar/impact scores assume none.");
 
-    // 3. impact_score — weak verbs/passive/unquantified/vague errors
-    const IMPACT_TYPES = new Set(["quantification_missing", "weak_verb", "passive_voice", "vague_language"]);
-    const impactCount = result.errors.filter(e => IMPACT_TYPES.has(e.error_type)).length;
-    result.scorecard.impact_score.score =
-      impactCount === 0 ? 90 :
-      impactCount <= 2  ? 75 :
-      impactCount <= 5  ? 60 :
-      impactCount <= 9  ? 45 : 30;
+        // Stage 4 — deterministic matching + scoring (code)
+        const mustHave = buildSkills(jd.must_have, resumeText);
+        const niceToHave = buildSkills(jd.nice_to_have, resumeText);
+        const bonusSkills = extractBonusSkills(structured, [...jd.must_have, ...jd.nice_to_have]);
+        const scoring = computeScores({
+          errors, formattingAudit: audit, mustHave, niceToHave,
+          parseWarningCount: structured.warnings.length,
+        });
 
-    // 4. skills_match_score — must_have 80% weight, nice_to_have 20%
-    const mustHave = result.skills_gap.must_have;
-    const niceToHave = result.skills_gap.nice_to_have;
-    const mustHaveRatio = mustHave.length === 0 ? 1.0 :
-      mustHave.reduce((sum, s) =>
-        sum + (s.match_strength === "exact" ? 1 : s.match_strength === "partial" ? 0.5 : 0), 0
-      ) / mustHave.length;
-    const niceToHaveRatio = niceToHave.length === 0 ? 1.0 :
-      niceToHave.reduce((sum, s) =>
-        sum + (s.match_strength === "exact" ? 1 : s.match_strength === "partial" ? 0.5 : 0), 0
-      ) / niceToHave.length;
-    result.scorecard.skills_match_score.score =
-      Math.round((mustHaveRatio * 0.8 + niceToHaveRatio * 0.2) * 100);
+        // Stage 5 — AI-3 summary from a compact factual digest
+        emit("stage", { stage: "summary", progress: 85 });
+        const sc = scoring.scorecard;
+        const missingMust = mustHave.filter((s) => s.match_strength === "missing").map((s) => s.name);
+        const auditCount = AUDIT_KEYS.reduce((n, k) => n + audit[k].length, 0);
+        const digest = [
+          `Job title: ${jd.job_title || "unknown"}`,
+          `JD quality: ${jd.jd_quality}`,
+          `Overall ATS score: ${sc.overall_ats_score.score}/100 (verdict: ${scoring.verdict})`,
+          `Must-have skills matched: ${mustHave.filter((s) => s.match_strength !== "missing").length}/${mustHave.length}`,
+          `Missing must-have skills: ${missingMust.join(", ") || "none"}`,
+          `Bonus skills on resume: ${bonusSkills.slice(0, 6).join(", ") || "none"}`,
+          `Writing errors: ${errors.length} (${errors.filter((e) => e.severity === "critical").length} critical)`,
+          `Top errors: ${errors.slice(0, 5).map((e) => `${e.error_type}: ${e.reason}`).join("; ") || "none"}`,
+          `Formatting inconsistencies: ${auditCount}`,
+          `Scores — skills ${sc.skills_match_score.score}, keywords ${sc.keyword_density_score.score}, impact ${sc.impact_score.score}, grammar ${sc.grammar_score.score}, formatting ${sc.formatting_score.score}`,
+        ].join("\n");
 
-    // 5. keyword_density_score — present skills / total skills (binary)
-    const allSkills = [...mustHave, ...niceToHave];
-    result.scorecard.keyword_density_score.score =
-      allSkills.length === 0 ? 50 :
-      Math.round(allSkills.filter(s => s.present_in_resume).length / allSkills.length * 100);
+        const summaryOutcome = await callStage({
+          groq, model, systemPrompt: SUMMARY_PROMPT,
+          userPrompt: buildSummaryUserPrompt(digest),
+          schema: SummarySchema, maxTokens: 500, onWarning: warn,
+        });
 
-    // 6. overall_match_percentage — synced with skills_match_score
-    result.skills_gap.overall_match_percentage = result.scorecard.skills_match_score.score;
+        const fallback = buildFallbackSummary(scoring, mustHave, errors, bonusSkills);
+        const summary =
+          summaryOutcome.ok && summaryOutcome.data.headline
+            ? {
+                verdict: scoring.verdict,
+                headline: summaryOutcome.data.headline,
+                top_strengths:
+                  summaryOutcome.data.top_strengths.length === 3
+                    ? summaryOutcome.data.top_strengths
+                    : fallback.top_strengths,
+                top_improvements:
+                  summaryOutcome.data.top_improvements.length === 3
+                    ? summaryOutcome.data.top_improvements
+                    : fallback.top_improvements,
+                tailoring_advice: summaryOutcome.data.tailoring_advice || fallback.tailoring_advice,
+              }
+            : fallback;
+        if (!summaryOutcome.ok) warn("The AI summary didn't come back — showing one built from the scores instead.");
 
-    // 7. overall_ats_score — weighted formula
-    const sc = result.scorecard;
-    sc.overall_ats_score.score = Math.round(
-      sc.skills_match_score.score    * 0.35 +
-      sc.keyword_density_score.score * 0.20 +
-      sc.impact_score.score          * 0.20 +
-      sc.grammar_score.score         * 0.15 +
-      sc.formatting_score.score      * 0.10
-    );
+        const actualModel =
+          (jdOutcome.ok && jdOutcome.actualModel) ||
+          (errorsOutcome.ok && errorsOutcome.actualModel) ||
+          model;
 
-    // 8. verdict — derived from overall_ats_score
-    result.summary.verdict =
-      sc.overall_ats_score.score >= 80 ? "strong"     :
-      sc.overall_ats_score.score >= 65 ? "moderate"   :
-      sc.overall_ats_score.score >= 50 ? "needs_work" : "critical";
+        const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
+        const result: RawAnalysisResult = {
+          scorecard: scoring.scorecard,
+          skills_gap: {
+            must_have: mustHave,
+            nice_to_have: niceToHave,
+            bonus_skills: bonusSkills,
+            overall_match_percentage: scoring.overallMatchPercentage,
+          },
+          errors,
+          formatting_audit: audit,
+          ats_extraction: atsExtraction,
+          warnings,
+          summary,
+          metadata: {
+            model: actualModel,
+            resume_word_count: words(resumeText),
+            jd_word_count: words(jdText),
+            jd_quality: jd.jd_quality,
+            total_errors_found: errors.length,
+            pipeline_version: 2,
+          },
+        };
 
-    // 9. is_clean + metadata
-    result.formatting_audit.is_clean = AUDIT_KEYS.every(k => result.formatting_audit[k].length === 0);
-    result.metadata.model = actualModel;
-    result.metadata.total_errors_found = result.errors.length;
-    // ── END SERVER-SIDE SCORING ──────────────────────────────────────────────
-
-    return NextResponse.json<AnalyzeResponse>({ result });
-  } catch (err: unknown) {
-    if (err && typeof err === "object") {
-      const errObj = err as Record<string, unknown>;
-      const status = errObj.status as number | undefined;
-      if (status === 401) {
-        return NextResponse.json<ApiError>(
-          { error: "Invalid Groq API key. Check your key and try again.", code: "INVALID_KEY" },
-          { status: 401 }
-        );
+        emit("result", { result });
+        controller.close();
+      } catch (err) {
+        console.error("[analyze]", err);
+        emit("error", { error: "Analysis failed. Please try again.", code: "UNKNOWN" });
+        controller.close();
       }
-      if (status === 413) {
-        return NextResponse.json<ApiError>(
-          { error: "Request too large for this model's free tier. Switch to a larger model in Settings (e.g. Llama 3.3 70B) or try a shorter resume.", code: "RATE_LIMITED" },
-          { status: 413 }
-        );
-      }
-      if (status === 429) {
-        return NextResponse.json<ApiError>(
-          { error: "Groq rate limit reached. Free tier allows ~30 requests/minute. Try again shortly.", code: "RATE_LIMITED" },
-          { status: 429 }
-        );
-      }
-    }
-    console.error("[analyze]", err);
-    return NextResponse.json<ApiError>(
-      { error: "Analysis failed. Please try again.", code: "UNKNOWN" },
-      { status: 500 }
-    );
-  }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
 }

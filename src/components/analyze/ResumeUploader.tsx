@@ -26,11 +26,11 @@ export function ResumeUploader({
       } else if (rejected.length > 0) {
         const code = rejected[0].errors[0]?.code;
         if (code === "file-too-large") {
-          onFileRejected("File too large. Maximum size is 5MB.");
+          onFileRejected("That file is over 5 MB.");
         } else if (code === "file-invalid-type") {
-          onFileRejected("Only PDF files are supported.");
+          onFileRejected("PDFs only — export your resume as a PDF first.");
         } else {
-          onFileRejected("Could not accept this file.");
+          onFileRejected("Couldn't read that file.");
         }
       }
     },
@@ -46,8 +46,8 @@ export function ResumeUploader({
 
   if (file) {
     return (
-      <div className="flex items-center gap-3 p-3 rounded-lg border border-green-500/50 bg-green-500/5">
-        <FileText className="w-8 h-8 text-green-500 shrink-0" />
+      <div className="flex items-center gap-3 p-3 rounded-lg border border-primary/40 bg-primary/5">
+        <FileText className="w-8 h-8 text-primary shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{file.name}</p>
           <p className="text-xs text-muted-foreground">
@@ -72,26 +72,26 @@ export function ResumeUploader({
     <div
       {...getRootProps()}
       className={cn(
-        "relative flex flex-col items-center justify-center gap-3 p-8 rounded-lg border-2 border-dashed cursor-pointer transition-colors",
+        "relative flex flex-col items-center justify-center gap-3 p-8 min-h-[224px] rounded-lg border border-dashed cursor-pointer transition-colors",
         isDragActive
-          ? "border-indigo-500 bg-indigo-500/5"
-          : "border-border hover:border-indigo-400 hover:bg-muted/30"
+          ? "border-primary"
+          : "border-border hover:border-muted-foreground/40"
       )}
     >
       <input {...getInputProps()} />
       <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted">
         {isDragActive ? (
-          <AlertCircle className="w-6 h-6 text-indigo-500" />
+          <AlertCircle className="w-6 h-6 text-primary" />
         ) : (
           <Upload className="w-6 h-6 text-muted-foreground" />
         )}
       </div>
       <div className="text-center">
         <p className="text-sm font-medium">
-          {isDragActive ? "Drop your PDF here" : "Upload Resume PDF"}
+          {isDragActive ? "Drop it" : "Drop your resume here"}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Drag & drop or click to browse · PDF only · Max 5MB
+          or click to browse · PDF, up to 5 MB
         </p>
       </div>
     </div>

@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import { Trash2, ChevronDown, ChevronUp } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScoreRing } from "@/components/results/ScoreRing";
 import { ResultsContainer } from "@/components/results/ResultsContainer";
+import { cn } from "@/lib/utils";
 import type { HistoryEntry } from "@/types/history";
 
 interface HistoryCardProps {
@@ -14,48 +12,46 @@ interface HistoryCardProps {
   onRemove: (id: string) => void;
 }
 
-const VERDICT_BADGE = {
-  strong: "bg-green-500/10 text-green-600 dark:text-green-400",
-  moderate: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  needs_work: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
-  critical: "bg-red-500/10 text-red-600 dark:text-red-400",
-};
-
 const VERDICT_LABELS = {
   strong: "Strong",
   moderate: "Moderate",
-  needs_work: "Needs Work",
+  needs_work: "Needs work",
   critical: "Critical",
 };
+
+function scoreColorClass(score: number) {
+  if (score >= 80) return "text-green-600 dark:text-green-400";
+  if (score >= 60) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
+}
 
 export function HistoryCard({ entry, onRemove }: HistoryCardProps) {
   const [expanded, setExpanded] = useState(false);
   const verdict = entry.result.summary.verdict;
 
   return (
-    <Card className="overflow-hidden">
+    <div>
       <div
         role="button"
         tabIndex={0}
-        className="w-full flex items-center gap-4 p-4 text-left hover:bg-muted/30 transition-colors cursor-pointer"
+        className="w-full flex items-center gap-4 px-1 py-4 text-left hover:bg-muted/30 transition-colors cursor-pointer rounded-lg"
         onClick={() => setExpanded((e) => !e)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded((v) => !v); }}
       >
-        <ScoreRing score={entry.overall_score} size="sm" animate={false} />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${VERDICT_BADGE[verdict]}`}>
-              {VERDICT_LABELS[verdict]}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {new Date(entry.created_at).toLocaleDateString("en-US", {
-                month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
-              })}
-            </span>
-          </div>
-          <p className="text-sm truncate text-muted-foreground">{entry.job_title_hint}</p>
+          <p className="text-sm truncate">{entry.job_title_hint}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {new Date(entry.created_at).toLocaleDateString("en-US", {
+              month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit",
+            })}
+            {" · "}
+            {VERDICT_LABELS[verdict]}
+          </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <span className={cn("text-2xl font-light tabular-nums shrink-0", scoreColorClass(entry.overall_score))}>
+          {entry.overall_score}
+        </span>
+        <div className="flex items-center gap-1 shrink-0">
           <Button
             type="button"
             variant="ghost"
@@ -69,15 +65,15 @@ export function HistoryCard({ entry, onRemove }: HistoryCardProps) {
           >
             <Trash2 className="w-4 h-4" />
           </Button>
-          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
         </div>
       </div>
 
       {expanded && (
-        <CardContent className="border-t pt-6">
+        <div className="pt-2 pb-6">
           <ResultsContainer result={entry.result} onReset={() => setExpanded(false)} />
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }

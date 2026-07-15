@@ -9,10 +9,10 @@ export function createGroqClient(apiKey: string): Groq {
 }
 
 export const GROQ_MODELS = [
-  { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant", note: "Fastest" },
-  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile", note: "Most accurate" },
-  { id: "gemma2-9b-it", label: "Gemma 2 9B", note: "Balanced" },
-  { id: "mixtral-8x7b-32768", label: "Mixtral 8x7B", note: "Long context" },
+  { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant", note: "Fastest · default" },
+  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile", note: "Sharpest audit" },
+  { id: "openai/gpt-oss-20b", label: "GPT-OSS 20B", note: "Middle ground" },
+  { id: "openai/gpt-oss-120b", label: "GPT-OSS 120B", note: "Slow but thorough" },
 ];
 
 // Authoritative allowlist — validated in the API route before calling Groq
