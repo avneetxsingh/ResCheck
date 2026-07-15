@@ -55,11 +55,42 @@ describe("computeScores", () => {
     expect(out.scorecard.grammar_score.score).toBe(67);
   });
 
-  it("overall is the weighted formula, verdict from brackets", () => {
+  it("overall is the ATS-screen weighted formula, verdict from brackets", () => {
     const out = computeScores({ errors: [], formattingAudit: CLEAN_AUDIT, mustHave: [], niceToHave: [] });
-    // skills 100*.35 + kw 50*.20 + impact 90*.20 + grammar 95*.15 + formatting 95*.10 = 86.75 → 87
-    expect(out.scorecard.overall_ats_score.score).toBe(87);
+    // skills 100*.45 + kw 50*.25 + formatting 95*.15 + impact 90*.10 + grammar 95*.05 = 85.5 → 86
+    expect(out.scorecard.overall_ats_score.score).toBe(86);
     expect(out.verdict).toBe("strong");
+  });
+
+  it("any missing must-have caps overall at 79 (cannot be strong)", () => {
+    const out = computeScores({
+      errors: [], formattingAudit: CLEAN_AUDIT,
+      mustHave: [...Array.from({ length: 9 }, (_, i) => skill(`S${i}`, "exact")), skill("Rust", "missing")],
+      niceToHave: [],
+    });
+    // raw would be 92 — knocked down to the cap
+    expect(out.scorecard.overall_ats_score.score).toBe(79);
+    expect(out.verdict).toBe("moderate");
+    expect(out.scorecard.overall_ats_score.rationale).toContain("Capped");
+  });
+
+  it("more than half the must-haves missing caps overall at 49 (critical)", () => {
+    const out = computeScores({
+      errors: [], formattingAudit: CLEAN_AUDIT,
+      mustHave: [skill("A", "exact"), skill("B", "exact"), skill("C", "missing"), skill("D", "missing"), skill("E", "missing")],
+      niceToHave: [],
+    });
+    expect(out.scorecard.overall_ats_score.score).toBe(49);
+    expect(out.verdict).toBe("critical");
+  });
+
+  it("parse warnings penalize the formatting score by 15 each", () => {
+    const out = computeScores({
+      errors: [], formattingAudit: CLEAN_AUDIT, mustHave: [], niceToHave: [],
+      parseWarningCount: 2,
+    });
+    expect(out.scorecard.formatting_score.score).toBe(65);
+    expect(out.scorecard.formatting_score.rationale).toContain("parse warning");
   });
 
   it("every metric carries a non-empty rationale and improvement_tip", () => {

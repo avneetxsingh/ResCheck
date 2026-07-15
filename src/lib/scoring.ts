@@ -1,6 +1,9 @@
 // Server-side deterministic scoring — the ground truth for every score the
-// user sees. Brackets and weights are ported verbatim from pipeline v1;
-// changing them is a product decision, not a refactor.
+// user sees. Per-metric brackets are ported verbatim from pipeline v1. The
+// overall weights and must-have knockout caps were re-set 2026-07-15 to mirror
+// a real ATS screen (requirement coverage dominates; writing style barely
+// registers). Changing weights/caps/brackets is a product decision, not a
+// refactor.
 import type {
   ExecutiveSummary, FormattingAudit, LineError, Scorecard, ScorecardMetric, Skill,
 } from "@/types/analysis";
@@ -19,6 +22,10 @@ export interface ScoringInput {
   formattingAudit: FormattingAudit;
   mustHave: Skill[];
   niceToHave: Skill[];
+  // Warnings from ats-extract (no headings, no email/phone, garbled text).
+  // Parseability is the first thing a real ATS scores, so these penalize
+  // the formatting metric.
+  parseWarningCount?: number;
 }
 
 export interface ScoringOutput {
@@ -51,11 +58,15 @@ function strengthRatio(skills: Skill[]): number {
 
 export function computeScores(input: ScoringInput): ScoringOutput {
   const { errors, formattingAudit, mustHave, niceToHave } = input;
+  const parseWarnings = input.parseWarningCount ?? 0;
 
-  // formatting — audit issue count brackets (v1 verbatim)
+  // formatting — audit issue count brackets (v1 verbatim), then parse warnings
+  // (missing sections/contact) subtract 15 each: an ATS that can't segment the
+  // resume never gets to the cosmetics.
   const auditCount = AUDIT_KEYS.reduce((n, k) => n + formattingAudit[k].length, 0);
-  const formattingScore =
+  const auditBracket =
     auditCount === 0 ? 95 : auditCount <= 2 ? 82 : auditCount <= 5 ? 67 : auditCount <= 10 ? 50 : 35;
+  const formattingScore = Math.max(15, auditBracket - parseWarnings * 15);
 
   // grammar — error count brackets (v1 verbatim)
   const grammarCount = errors.filter((e) => GRAMMAR_TYPES.has(e.error_type)).length;
@@ -75,65 +86,88 @@ export function computeScores(input: ScoringInput): ScoringOutput {
   const keywordScore =
     allSkills.length === 0 ? 50 : Math.round((presentCount / allSkills.length) * 100);
 
-  const overall = Math.round(
-    skillsScore * 0.35 + keywordScore * 0.2 + impactScore * 0.2 + grammarScore * 0.15 + formattingScore * 0.1
+  // ATS-screen weighting: requirement coverage 70%, parseability 15%, writing
+  // style 15% combined — no real screen reads prose quality.
+  const rawOverall = Math.round(
+    skillsScore * 0.45 + keywordScore * 0.25 + formattingScore * 0.15 + impactScore * 0.1 + grammarScore * 0.05
   );
+
+  const missingMust = mustHave.filter((s) => s.match_strength === "missing").map((s) => s.name);
+
+  // Knockout caps: screens reject on missing must-haves regardless of polish.
+  // Any missing → can't be "strong"; more than half missing → "critical".
+  const cap =
+    mustHave.length === 0 ? 100
+    : missingMust.length > mustHave.length / 2 ? 49
+    : missingMust.length > 0 ? 79
+    : 100;
+  const overall = Math.min(rawOverall, cap);
 
   const verdict: ExecutiveSummary["verdict"] =
     overall >= 80 ? "strong" : overall >= 65 ? "moderate" : overall >= 50 ? "needs_work" : "critical";
-
-  const missingMust = mustHave.filter((s) => s.match_strength === "missing").map((s) => s.name);
   const exactCount = mustHave.filter((s) => s.match_strength === "exact").length;
   const partialCount = mustHave.filter((s) => s.match_strength === "partial").length;
 
   const scorecard: Scorecard = {
     overall_ats_score: metric(
       overall,
-      "Overall ATS Score",
-      "Weighted: skills 35%, keywords 20%, impact 20%, grammar 15%, formatting 10%.",
+      "Overall",
+      overall < rawOverall
+        ? `Capped at ${overall}: an ATS screen knocks out on missing must-have skills, no matter how polished the rest is.`
+        : "Weighted like a real screen: skills 45%, keywords 25%, parseability 15% — writing style is only the last 15%.",
       missingMust.length > 0
-        ? `The fastest gain is covering missing must-have skills: ${missingMust.slice(0, 3).join(", ")}.`
-        : "Strengthen impact bullets with concrete numbers to push the score higher."
+        ? `Biggest lever: the posting asks for ${missingMust.slice(0, 3).join(", ")} and your resume doesn't mention ${missingMust.length === 1 ? "it" : "them"}.`
+        : "The gaps left are small — put numbers on your strongest bullets and the score follows."
     ),
     skills_match_score: metric(
       skillsScore,
-      "Skills Match",
-      `${exactCount} of ${mustHave.length} must-have skills matched exactly, ${partialCount} partially.`,
+      "Skills match",
+      `Of ${mustHave.length} required skills, ${exactCount} matched exactly and ${partialCount} partially.`,
       missingMust.length > 0
-        ? `Add where truthful: ${missingMust.slice(0, 3).join(", ")}.`
-        : "All must-have skills are covered — mirror the JD's exact wording where possible."
+        ? `If you've actually used ${missingMust.slice(0, 3).join(", ")}, say so — right now the resume doesn't.`
+        : "Every requirement is covered. Use the posting's exact wording so the match is unmissable."
     ),
     grammar_score: metric(
       grammarScore,
-      "Grammar & Language",
-      `${grammarCount} language error(s) found (grammar, spelling, punctuation, tense).`,
+      "Grammar & language",
+      grammarCount === 0
+        ? "No grammar, spelling, punctuation, or tense problems found."
+        : `${grammarCount} language ${grammarCount === 1 ? "problem" : "problems"} — grammar, spelling, punctuation, or tense.`,
       grammarCount > 0
-        ? "Fix the flagged lines in the Errors tab — language errors read as carelessness to recruiters."
-        : "No language errors found — keep it that way after edits."
+        ? "These are the cheapest points on the page — each one has a ready rewrite in the Errors tab."
+        : "Clean. Re-check after any edits; typos creep in late."
     ),
     formatting_score: metric(
       formattingScore,
       "Formatting",
-      `${auditCount} formatting inconsistenc${auditCount === 1 ? "y" : "ies"} detected by the deterministic audit.`,
-      auditCount > 0
-        ? "Resolve the items in the Formatting tab — each one quotes the exact text to fix."
-        : "Formatting is consistent — no action needed."
+      parseWarnings > 0
+        ? `${parseWarnings} parse ${parseWarnings === 1 ? "warning" : "warnings"} (see "What the ATS sees")${auditCount > 0 ? ` plus ${auditCount} formatting ${auditCount === 1 ? "inconsistency" : "inconsistencies"}` : ""}.`
+        : auditCount === 0
+        ? "Parses cleanly, and spacing, bullets, dates, and casing are consistent throughout."
+        : `${auditCount} ${auditCount === 1 ? "inconsistency" : "inconsistencies"} in spacing, bullets, dates, or casing.`,
+      parseWarnings > 0
+        ? "Fix the parse warnings first — an ATS that can't read the resume never sees the content."
+        : auditCount > 0
+        ? "The Formatting tab quotes each one verbatim — fixes take a minute apiece."
+        : "Nothing to do here."
     ),
     impact_score: metric(
       impactScore,
-      "Impact & Quantification",
-      `${impactCount} weak-impact line(s): weak verbs, passive voice, missing metrics, or vague claims.`,
+      "Impact",
+      impactCount === 0
+        ? "Bullets lead with strong verbs and carry numbers."
+        : `${impactCount} ${impactCount === 1 ? "bullet reads" : "bullets read"} flat — weak verbs, passive voice, or claims with no numbers.`,
       impactCount > 0
-        ? "Rewrite flagged bullets: strong verb first, then a number (%, $, count, time saved)."
-        : "Bullets are strong and quantified."
+        ? "Rewrite the flagged ones: verb first, then the number — %, $, headcount, time saved."
+        : "Keep this up — quantified bullets are what get read."
     ),
     keyword_density_score: metric(
       keywordScore,
-      "Keyword Density",
-      `${presentCount} of ${allSkills.length} JD skills appear in the resume text.`,
+      "Keyword coverage",
+      `${presentCount} of the ${allSkills.length} skills in the posting appear somewhere in your resume.`,
       presentCount < allSkills.length
-        ? "Work absent JD keywords into real experience bullets — never keyword-stuff."
-        : "Every JD skill appears at least once."
+        ? "Fold the missing terms into real experience bullets. Don't stuff a keywords section."
+        : "Full coverage — every term the posting uses shows up at least once."
     ),
   };
 
@@ -141,10 +175,10 @@ export function computeScores(input: ScoringInput): ScoringOutput {
 }
 
 const VERDICT_HEADLINE: Record<ExecutiveSummary["verdict"], string> = {
-  strong: "This resume is well matched to the role and should pass ATS screening.",
-  moderate: "This resume is a reasonable match but has fixable gaps before applying.",
-  needs_work: "This resume needs targeted fixes before it will screen well for this role.",
-  critical: "This resume is unlikely to pass ATS screening for this role without major changes.",
+  strong: "Good fit — this should clear an ATS screen for the role.",
+  moderate: "Close, but a handful of fixable gaps are worth closing before you apply.",
+  needs_work: "Not there yet — a few targeted fixes would change how this screens.",
+  critical: "As written, this is unlikely to get past screening for this role.",
 };
 
 // Used when the summary AI stage fails — every input here is deterministic,
@@ -161,19 +195,19 @@ export function buildFallbackSummary(
   const critical = errors.filter((e) => e.severity === "critical");
 
   const strengths = [
-    exact.length > 0 ? `Covers ${exact.length} must-have skill(s) exactly: ${exact.slice(0, 3).join(", ")}.` : null,
-    sc.formatting_score.score >= 82 ? "Formatting is clean and consistent." : null,
-    sc.grammar_score.score >= 82 ? "Language is largely error-free." : null,
-    bonusSkills.length > 0 ? `Brings bonus skills beyond the JD: ${bonusSkills.slice(0, 3).join(", ")}.` : null,
-    sc.impact_score.score >= 75 ? "Bullets show quantified impact." : null,
+    exact.length > 0 ? `${exact.slice(0, 3).join(", ")} — required, and clearly there.` : null,
+    sc.formatting_score.score >= 82 ? "Formatting is consistent, so nothing distracts from the content." : null,
+    sc.grammar_score.score >= 82 ? "The writing is clean — little to no language errors." : null,
+    bonusSkills.length > 0 ? `${bonusSkills.slice(0, 3).join(", ")} go beyond what the posting asks for.` : null,
+    sc.impact_score.score >= 75 ? "Bullets carry real numbers, which is what gets read." : null,
   ].filter((s): s is string => s !== null);
 
   const improvements = [
-    missing.length > 0 ? `Add missing must-have skills where truthful: ${missing.slice(0, 3).join(", ")}.` : null,
-    critical.length > 0 ? `Fix ${critical.length} critical writing error(s) first.` : null,
-    sc.impact_score.score < 75 ? "Quantify achievement bullets with numbers." : null,
-    sc.formatting_score.score < 82 ? "Resolve the formatting inconsistencies in the Formatting tab." : null,
-    sc.keyword_density_score.score < 70 ? "Increase JD keyword coverage in experience bullets." : null,
+    missing.length > 0 ? `The posting requires ${missing.slice(0, 3).join(", ")} and the resume never mentions ${missing.length === 1 ? "it" : "them"}.` : null,
+    critical.length > 0 ? `${critical.length} critical writing ${critical.length === 1 ? "error" : "errors"} — fix ${critical.length === 1 ? "that" : "those"} before anything else.` : null,
+    sc.impact_score.score < 75 ? "Too many bullets have no numbers behind them." : null,
+    sc.formatting_score.score < 82 ? "Formatting inconsistencies add up — the Formatting tab lists each one." : null,
+    sc.keyword_density_score.score < 70 ? "A lot of the posting's terms never appear in the resume text." : null,
   ].filter((s): s is string => s !== null);
 
   const pad = (arr: string[], filler: string[]): string[] =>
@@ -183,18 +217,18 @@ export function buildFallbackSummary(
     verdict: out.verdict,
     headline: VERDICT_HEADLINE[out.verdict],
     top_strengths: pad(strengths, [
-      "Resume parsed cleanly for ATS extraction.",
-      "Standard section structure is present.",
-      "Contact information is detectable.",
+      "The PDF parses cleanly — an ATS can read it.",
+      "Sections follow the structure screeners expect.",
+      "Contact details are where a parser looks for them.",
     ]),
     top_improvements: pad(improvements, [
-      "Mirror the JD's exact skill wording where truthful.",
-      "Lead every bullet with a strong action verb.",
-      "Keep bullet style consistent across sections.",
+      "Where you match a requirement, use the posting's exact words.",
+      "Start every bullet with a verb that did something.",
+      "Pick one bullet style and stick to it everywhere.",
     ]),
     tailoring_advice:
       missing.length > 0
-        ? `Prioritize adding ${missing.slice(0, 2).join(" and ")} to your experience bullets for this role.`
-        : "Mirror the job description's phrasing for your strongest matching skills.",
+        ? `For this role, start with ${missing.slice(0, 2).join(" and ")} — work ${missing.length === 1 ? "it" : "them"} into your experience bullets if you can claim ${missing.length === 1 ? "it" : "them"} honestly.`
+        : "You match the requirements — now echo the posting's own phrasing so the screen can't miss it.",
   };
 }

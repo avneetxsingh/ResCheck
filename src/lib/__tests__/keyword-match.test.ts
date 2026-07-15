@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSkills, extractBonusSkills } from "@/lib/keyword-match";
+import { buildSkills, extractBonusSkills, clipJd } from "@/lib/keyword-match";
 import { extractResumeStructure } from "@/lib/ats-extract";
 
 const RESUME = `Jane Doe
@@ -44,6 +44,36 @@ describe("buildSkills", () => {
 
   it("dedupes repeated names", () => {
     expect(buildSkills(["React", "react"], RESUME)).toHaveLength(1);
+  });
+
+  it("matches a degree requirement against how resumes actually write it", () => {
+    const [s] = buildSkills(["Bachelor's degree"], "EDUCATION\nBachelor of Science in Computer Science");
+    expect(s.present_in_resume).toBe(true);
+    expect(s.match_strength).toBe("partial");
+  });
+
+  it("matches Next.js against NextJS via alias", () => {
+    const [s] = buildSkills(["Next.js"], "Built dashboards with NextJS and Tailwind");
+    expect(s.present_in_resume).toBe(true);
+    expect(s.match_strength).toBe("partial");
+  });
+});
+
+describe("clipJd", () => {
+  it("returns short text unchanged", () => {
+    expect(clipJd("short posting", 4000)).toBe("short posting");
+  });
+
+  it("keeps the requirements section of a long posting instead of truncating it away", () => {
+    const jd = "About us. ".repeat(300) + "\nRequirements\nPython, SQL, Airflow";
+    const clipped = clipJd(jd, 1000);
+    expect(clipped).toContain("Python, SQL, Airflow");
+    expect(clipped.length).toBeLessThanOrEqual(1005);
+  });
+
+  it("falls back to the tail when no requirements marker exists", () => {
+    const jd = "blah ".repeat(500) + "FINAL_DETAILS";
+    expect(clipJd(jd, 1000)).toContain("FINAL_DETAILS");
   });
 });
 

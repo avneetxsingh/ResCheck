@@ -27,6 +27,12 @@ const ALIAS_GROUPS: string[][] = [
   ["continuous integration", "ci cd", "cicd", "ci"],
   ["user experience", "ux"],
   ["user interface", "ui"],
+  ["next.js", "nextjs", "next js"],
+  // Degree requirements: the JD-side form comes from the AI ("Bachelor's degree"),
+  // the resume-side forms are how people actually write them.
+  ["bachelor s degree", "bachelors degree", "bachelor s", "bachelor", "b.s.", "b.a.", "bsc", "undergraduate degree"],
+  ["master s degree", "masters degree", "master s", "masters", "m.s.", "msc"],
+  ["phd", "ph.d.", "ph.d", "doctorate", "doctoral degree"],
 ];
 
 function aliasesFor(norm: string): string[] {
@@ -99,6 +105,24 @@ export function buildSkills(names: string[], resumeText: string): Skill[] {
     });
   }
   return skills;
+}
+
+// A long posting's requirements usually sit after the company blurb, so blind
+// head-truncation cuts exactly the part that matters. Keep the head (title,
+// role framing) plus the window starting at the first requirements-style
+// heading found past it.
+const REQUIREMENTS_MARKER =
+  /(requirements?|qualifications?|must[- ]haves?|what you('|’)ll need|who you are|skills)\b/i;
+
+export function clipJd(text: string, budget: number): string {
+  if (text.length <= budget) return text;
+  const headLen = Math.floor(budget * 0.3);
+  const tailLen = budget - headLen;
+  const head = text.slice(0, headLen);
+  const rest = text.slice(headLen);
+  const markerIdx = rest.match(REQUIREMENTS_MARKER)?.index;
+  const start = markerIdx !== undefined ? markerIdx : Math.max(0, rest.length - tailLen);
+  return `${head}\n…\n${rest.slice(start, start + tailLen)}`;
 }
 
 export function extractBonusSkills(structured: StructuredResume, jdSkillNames: string[]): string[] {

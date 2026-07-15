@@ -7,7 +7,7 @@ import {
 } from "@/lib/prompts";
 import { extractResumeStructure, toAtsExtraction, buildSectionizedText, sectionNames } from "@/lib/ats-extract";
 import { runFormattingAudit } from "@/lib/formatting-audit";
-import { buildSkills, extractBonusSkills } from "@/lib/keyword-match";
+import { buildSkills, extractBonusSkills, clipJd } from "@/lib/keyword-match";
 import { computeScores, buildFallbackSummary, AUDIT_KEYS } from "@/lib/scoring";
 import type { ApiError } from "@/types/api";
 import type { RawAnalysisResult } from "@/types/analysis";
@@ -142,7 +142,7 @@ async function callStage<T>(opts: {
       const validated = opts.schema.safeParse(parsed);
       if (validated.success) return { ok: true, data: validated.data, actualModel };
       // .catch()-everywhere means this is unreachable, but stay defensive:
-      if (i === 0) opts.onWarning("AI stage returned an unexpected shape — retrying.");
+      if (i === 0) opts.onWarning("The model returned something unusable — retrying.");
     } catch (err: unknown) {
       const status =
         err && typeof err === "object" ? (err as Record<string, unknown>).status : undefined;
@@ -154,13 +154,13 @@ async function callStage<T>(opts: {
             : undefined;
         const retryAfter = Number(headers?.["retry-after"] ?? NaN);
         if (Number.isFinite(retryAfter) && retryAfter > 0 && retryAfter <= 20) {
-          opts.onWarning(`Groq rate limit hit — waiting ${retryAfter}s before retrying.`);
+          opts.onWarning(`Groq is rate-limiting — pausing ${retryAfter}s, then retrying.`);
           await new Promise((r) => setTimeout(r, retryAfter * 1000));
           continue;
         }
         return { ok: false, reason: "failed" };
       }
-      if (i === 0) opts.onWarning("AI stage failed — retrying once.");
+      if (i === 0) opts.onWarning("A model call failed — retrying once.");
     }
   }
   return { ok: false, reason: "failed" };
@@ -188,7 +188,9 @@ export async function POST(req: NextRequest) {
   const groq = createGroqClient(apiKey.trim());
   const model = body.model ?? GROQ_MODEL;
   const resumeText = body.resume_text.slice(0, RESUME_BUDGET_CHARS);
-  const jdText = body.job_description.slice(0, JD_BUDGET_CHARS);
+  // Requirements-aware clip: long postings keep their requirements section
+  // instead of losing it to head-truncation.
+  const jdText = clipJd(body.job_description, JD_BUDGET_CHARS);
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -233,7 +235,7 @@ export async function POST(req: NextRequest) {
           return;
         }
         if (!jdOutcome.ok && !errorsOutcome.ok) {
-          emit("error", { error: "AI analysis failed after retries. Please try again.", code: "UNKNOWN" });
+          emit("error", { error: "The model couldn't complete the analysis, even after retries. Try again in a minute, or switch models in Settings.", code: "UNKNOWN" });
           controller.close();
           return;
         }
@@ -241,16 +243,19 @@ export async function POST(req: NextRequest) {
         const jd: JdSkills = jdOutcome.ok
           ? jdOutcome.data
           : { job_title: "", must_have: [], nice_to_have: [], jd_quality: "sparse" };
-        if (!jdOutcome.ok) warn("Skill extraction failed — skills analysis is unavailable for this run.");
+        if (!jdOutcome.ok) warn("Couldn't extract skills from the job description this run — the Skills tab will be empty.");
 
         const errors = errorsOutcome.ok ? errorsOutcome.data.errors : [];
-        if (!errorsOutcome.ok) warn("Writing audit failed — grammar and impact scores are unverified for this run.");
+        if (!errorsOutcome.ok) warn("The writing audit didn't complete — no line issues are shown, and grammar/impact scores assume none.");
 
         // Stage 4 — deterministic matching + scoring (code)
         const mustHave = buildSkills(jd.must_have, resumeText);
         const niceToHave = buildSkills(jd.nice_to_have, resumeText);
         const bonusSkills = extractBonusSkills(structured, [...jd.must_have, ...jd.nice_to_have]);
-        const scoring = computeScores({ errors, formattingAudit: audit, mustHave, niceToHave });
+        const scoring = computeScores({
+          errors, formattingAudit: audit, mustHave, niceToHave,
+          parseWarningCount: structured.warnings.length,
+        });
 
         // Stage 5 — AI-3 summary from a compact factual digest
         emit("stage", { stage: "summary", progress: 85 });
@@ -293,7 +298,7 @@ export async function POST(req: NextRequest) {
                 tailoring_advice: summaryOutcome.data.tailoring_advice || fallback.tailoring_advice,
               }
             : fallback;
-        if (!summaryOutcome.ok) warn("Summary generation failed — a deterministic summary was used instead.");
+        if (!summaryOutcome.ok) warn("The AI summary didn't come back — showing one built from the scores instead.");
 
         const actualModel =
           (jdOutcome.ok && jdOutcome.actualModel) ||
