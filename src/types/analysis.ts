@@ -37,11 +37,22 @@ export interface LineError {
   severity: "critical" | "moderate" | "minor";
 }
 
+export interface SkillEvidence {
+  kind: "exact" | "alias";
+  sections: ResumeSection[];
+  roles: { title: string; months: number; ended_at: string | null }[];
+}
+
 export interface Skill {
   name: string;
   present_in_resume: boolean;
   category: "technical" | "soft" | "domain" | "tool";
   match_strength: "exact" | "partial" | "missing";
+  // Evidence fields — absent in history entries written before this change.
+  strength?: "strong" | "moderate" | "weak" | "missing";
+  evidence?: SkillEvidence | null;
+  last_used_months_ago?: number | null;
+  total_months?: number | null;
 }
 
 export interface SkillsGapAnalysis {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildSkills, extractBonusSkills, clipJd, sanitizeSkillName, isNegatedInJd } from "@/lib/keyword-match";
 import { extractResumeStructure } from "@/lib/ats-extract";
+import { segmentRoles } from "@/lib/work-history";
 
 const RESUME = `Jane Doe
 EXPERIENCE
@@ -178,5 +179,68 @@ describe("buildSkills word-level fallback", () => {
     // This is the case that actually exercises the all-word fallback.
     const [s] = buildSkills(["Machine Learning"], "Applied learning methods to machine vision");
     expect(s.match_strength).toBe("partial");
+  });
+});
+
+const EVIDENCE_RESUME = `Jane Doe
+EXPERIENCE
+Backend Engineer, Acme — May 2024 to Present
+• Built services in Go and deployed with Kubernetes
+Junior Developer, Initech — Jan 2016 to Jan 2017
+• Wrote COBOL batch jobs
+SKILLS
+Rust, Go, Kubernetes, COBOL`;
+
+const NOW_E = new Date("2026-08-17T00:00:00Z");
+
+describe("evidence-based strength", () => {
+  const structured = extractResumeStructure(EVIDENCE_RESUME);
+  const roles = segmentRoles(structured, [
+    { header_line: "Backend Engineer, Acme — May 2024 to Present", employer: "Acme", title: "Backend Engineer", start: "May 2024", end: "Present" },
+    { header_line: "Junior Developer, Initech — Jan 2016 to Jan 2017", employer: "Initech", title: "Junior Developer", start: "Jan 2016", end: "Jan 2017" },
+  ]);
+  const opts = { structured, roles, now: NOW_E };
+
+  it("rates a recent long-held role skill as strong", () => {
+    const [s] = buildSkills(["Kubernetes"], EVIDENCE_RESUME, opts);
+    expect(s.strength).toBe("strong");
+    expect(s.evidence?.roles[0].title).toBe("Backend Engineer");
+    expect(s.last_used_months_ago).toBe(0);
+  });
+
+  it("rates a stale role skill as moderate", () => {
+    const [s] = buildSkills(["COBOL"], EVIDENCE_RESUME, opts);
+    expect(s.strength).toBe("moderate");
+  });
+
+  it("rates a skills-list-only claim as weak", () => {
+    const [s] = buildSkills(["Rust"], EVIDENCE_RESUME, opts);
+    expect(s.strength).toBe("weak");
+    expect(s.evidence?.roles).toEqual([]);
+  });
+
+  it("rates an absent skill as missing with null evidence", () => {
+    const [s] = buildSkills(["Haskell"], EVIDENCE_RESUME, opts);
+    expect(s.strength).toBe("missing");
+    expect(s.evidence).toBeNull();
+  });
+
+  it("caps at moderate when the role dates did not parse", () => {
+    const undated = segmentRoles(structured, [
+      { header_line: "Backend Engineer, Acme — May 2024 to Present", employer: "Acme", title: "Backend Engineer", start: "whenever", end: "whenever" },
+    ]);
+    const [s] = buildSkills(["Kubernetes"], EVIDENCE_RESUME, { structured, roles: undated, now: NOW_E });
+    expect(s.strength).toBe("moderate");
+  });
+
+  it("keeps match_strength populated for old-history compatibility", () => {
+    const [s] = buildSkills(["Kubernetes"], EVIDENCE_RESUME, opts);
+    expect(s.match_strength).toBe("exact");
+  });
+
+  it("omits the new fields entirely when no roles are supplied", () => {
+    const [s] = buildSkills(["Kubernetes"], EVIDENCE_RESUME);
+    expect(s.strength).toBeUndefined();
+    expect(s.match_strength).toBe("exact");
   });
 });

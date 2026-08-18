@@ -1,8 +1,19 @@
 // Deterministic ATS-style keyword matching. The AI extracts skill NAMES from
 // the JD; whether each one appears in the resume is decided here, in code,
 // the way a real ATS decides it.
-import type { Skill } from "@/types/analysis";
+import type { Skill, SkillEvidence } from "@/types/analysis";
 import type { StructuredResume } from "./ats-extract";
+import type { RoleBlock } from "./work-history";
+import { computeWorkHistoryMetrics } from "./work-history";
+
+export interface BuildSkillsOptions {
+  structured?: StructuredResume;
+  roles?: RoleBlock[];
+  now?: Date;
+}
+
+const RECENT_MONTHS = 24;
+const SUBSTANTIAL_MONTHS = 12;
 
 // Keep + # . so "c++", "c#", "node.js" survive normalization.
 export function normalizeSkill(s: string): string {
@@ -65,7 +76,11 @@ function classifySkill(norm: string): Skill["category"] {
   return "technical";
 }
 
-export function buildSkills(names: string[], resumeText: string): Skill[] {
+export function buildSkills(
+  names: string[],
+  resumeText: string,
+  opts: BuildSkillsOptions = {}
+): Skill[] {
   const resumeNorm = normalizeSkill(resumeText);
   const seen = new Set<string>();
   const skills: Skill[] = [];
@@ -76,14 +91,14 @@ export function buildSkills(names: string[], resumeText: string): Skill[] {
     seen.add(norm);
 
     let present = false;
-    let strength: Skill["match_strength"] = "missing";
+    let legacyStrength: Skill["match_strength"] = "missing";
 
     if (containsTerm(resumeNorm, norm)) {
       present = true;
-      strength = "exact";
+      legacyStrength = "exact";
     } else if (aliasesFor(norm).some((a) => containsTerm(resumeNorm, a))) {
       present = true; // a clear equivalent appears — ATS counts it, at reduced weight
-      strength = "partial";
+      legacyStrength = "partial";
     } else {
       // Every significant word must appear. Half-word matching scored
       // "Machine Learning" against a resume that only said "learning".
@@ -92,14 +107,76 @@ export function buildSkills(names: string[], resumeText: string): Skill[] {
         containsTerm(resumeNorm, w + "s") ||
         (w.endsWith("s") && containsTerm(resumeNorm, w.slice(0, -1)));
       const words = norm.split(" ").filter((w) => w.length > 2);
-      if (words.length >= 2 && words.every(wordHit)) strength = "partial";
+      if (words.length >= 2 && words.every(wordHit)) legacyStrength = "partial";
+    }
+
+    // Evidence is only derivable when role blocks were supplied. Without them
+    // the result keeps its pre-existing shape, so old call sites are unaffected.
+    let evidence: SkillEvidence | null | undefined;
+    let strength: Skill["strength"] | undefined;
+    let lastUsed: number | null | undefined;
+    let totalMonths: number | null | undefined;
+
+    if (opts.roles) {
+      if (legacyStrength === "missing") {
+        evidence = null;
+        strength = "missing";
+        lastUsed = null;
+        totalMonths = null;
+      } else {
+        const matchedRoles = opts.roles.filter(
+          (r) => r.anchored && containsTerm(normalizeSkill(r.text), norm)
+        );
+        const dated = matchedRoles.filter((r) => r.range.start !== null && r.range.end !== null);
+        const metrics = computeWorkHistoryMetrics(
+          dated.map((r) => r.range),
+          opts.now ?? new Date()
+        );
+
+        const sections = (opts.structured?.sections ?? [])
+          .filter((s) => containsTerm(normalizeSkill(s.lines.join("\n")), norm))
+          .map((s) => s.name);
+
+        evidence = {
+          kind: containsTerm(resumeNorm, norm) ? "exact" : "alias",
+          sections,
+          roles: matchedRoles.map((r) => ({
+            title: r.title,
+            // Duration of this role alone, so the UI can say which role carried
+            // the skill longest. computeWorkHistoryMetrics on a single range
+            // returns that range's own length.
+            months: computeWorkHistoryMetrics([r.range], opts.now ?? new Date())
+              .total_experience_months,
+            ended_at: r.range.end?.precision === "present" ? null : String(r.range.end?.year ?? ""),
+          })),
+        };
+        lastUsed = matchedRoles.length > 0 ? metrics.last_used_months_ago : null;
+        totalMonths = matchedRoles.length > 0 ? metrics.total_experience_months : null;
+
+        if (matchedRoles.length === 0) {
+          strength = "weak"; // claimed in a list; nothing dated backs it
+        } else if (dated.length === 0) {
+          strength = "moderate"; // in a role, but recency is unverifiable
+        } else if (
+          metrics.last_used_months_ago !== null &&
+          metrics.last_used_months_ago <= RECENT_MONTHS &&
+          metrics.total_experience_months >= SUBSTANTIAL_MONTHS
+        ) {
+          strength = "strong";
+        } else {
+          strength = "moderate";
+        }
+      }
     }
 
     skills.push({
       name: name.trim(),
       present_in_resume: present,
       category: classifySkill(norm),
-      match_strength: strength,
+      match_strength: legacyStrength,
+      ...(opts.roles
+        ? { strength, evidence, last_used_months_ago: lastUsed, total_months: totalMonths }
+        : {}),
     });
   }
   return skills;
