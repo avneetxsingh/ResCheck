@@ -85,16 +85,14 @@ export function buildSkills(names: string[], resumeText: string): Skill[] {
       present = true; // a clear equivalent appears — ATS counts it, at reduced weight
       strength = "partial";
     } else {
-      // Word-level fallback with simple plural tolerance ("API" matches "APIs")
+      // Every significant word must appear. Half-word matching scored
+      // "Machine Learning" against a resume that only said "learning".
       const wordHit = (w: string) =>
         containsTerm(resumeNorm, w) ||
         containsTerm(resumeNorm, w + "s") ||
         (w.endsWith("s") && containsTerm(resumeNorm, w.slice(0, -1)));
       const words = norm.split(" ").filter((w) => w.length > 2);
-      if (words.length >= 2) {
-        const hits = words.filter(wordHit).length;
-        if (hits >= Math.ceil(words.length / 2)) strength = "partial";
-      }
+      if (words.length >= 2 && words.every(wordHit)) strength = "partial";
     }
 
     skills.push({

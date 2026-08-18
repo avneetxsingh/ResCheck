@@ -26,9 +26,9 @@ describe("buildSkills", () => {
     expect(s).toMatchObject({ present_in_resume: false, match_strength: "missing" });
   });
 
-  it("multiword skill with half its words found is partial but not present", () => {
+  it("multiword skill missing one of its words does not match", () => {
     const [s] = buildSkills(["REST API design"], RESUME);
-    expect(s.match_strength).toBe("partial");
+    expect(s.match_strength).toBe("missing");
     expect(s.present_in_resume).toBe(false);
   });
 
@@ -148,5 +148,35 @@ describe("isNegatedInJd", () => {
 
   it("still negates when every occurrence is negated", () => {
     expect(isNegatedInJd("Kubernetes", "No Kubernetes needed, and no Kubernetes experience expected.")).toBe(true);
+  });
+});
+
+describe("buildSkills word-level fallback", () => {
+  const RESUME_LEARNING = `EXPERIENCE
+• Improved learning agility across the team
+• Ran project retrospectives`;
+
+  it("does not match a multi-word skill on a single shared word", () => {
+    const [s] = buildSkills(["Machine Learning"], RESUME_LEARNING);
+    expect(s.match_strength).toBe("missing");
+    expect(s.present_in_resume).toBe(false);
+  });
+
+  it("does not match Project Management on the word project alone", () => {
+    const [s] = buildSkills(["Project Management"], RESUME_LEARNING);
+    expect(s.match_strength).toBe("missing");
+  });
+
+  it("matches a contiguous multi-word phrase exactly", () => {
+    // Contiguous text hits the exact branch and never reaches the word
+    // fallback, so this is "exact", not "partial".
+    const [s] = buildSkills(["Machine Learning"], "Built machine learning pipelines in production");
+    expect(s.match_strength).toBe("exact");
+  });
+
+  it("matches a multi-word skill whose words are present but not adjacent", () => {
+    // This is the case that actually exercises the all-word fallback.
+    const [s] = buildSkills(["Machine Learning"], "Applied learning methods to machine vision");
+    expect(s.match_strength).toBe("partial");
   });
 });
