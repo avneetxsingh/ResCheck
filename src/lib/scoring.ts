@@ -46,13 +46,22 @@ function metric(score: number, label: string, rationale: string, tip: string): S
   };
 }
 
+const STRENGTH_WEIGHT: Record<NonNullable<Skill["strength"]>, number> = {
+  strong: 1.0,
+  moderate: 0.6,
+  weak: 0.3,
+  missing: 0,
+};
+
 function strengthRatio(skills: Skill[]): number {
   if (skills.length === 0) return 1.0;
   return (
-    skills.reduce(
-      (sum, s) => sum + (s.match_strength === "exact" ? 1 : s.match_strength === "partial" ? 0.5 : 0),
-      0
-    ) / skills.length
+    skills.reduce((sum, s) => {
+      // History entries written before evidence scoring carry only
+      // match_strength, so fall back rather than scoring them as zero.
+      if (s.strength) return sum + STRENGTH_WEIGHT[s.strength];
+      return sum + (s.match_strength === "exact" ? 1 : s.match_strength === "partial" ? 0.5 : 0);
+    }, 0) / skills.length
   );
 }
 

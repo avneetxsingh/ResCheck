@@ -105,6 +105,37 @@ describe("computeScores", () => {
   });
 });
 
+const CLEAN_AUDIT_2 = {
+  whitespace_issues: [], bold_inconsistencies: [], bullet_inconsistencies: [],
+  date_format_issues: [], capitalization_issues: [], other_inconsistencies: [], is_clean: true,
+};
+
+const skillBase = { name: "X", present_in_resume: true, category: "technical" as const };
+
+describe("strength-aware scoring", () => {
+  it("scores a strong skill above a weak one", () => {
+    const strong = computeScores({
+      errors: [], formattingAudit: CLEAN_AUDIT_2, niceToHave: [],
+      mustHave: [{ ...skillBase, match_strength: "exact" as const, strength: "strong" as const }],
+    });
+    const weak = computeScores({
+      errors: [], formattingAudit: CLEAN_AUDIT_2, niceToHave: [],
+      mustHave: [{ ...skillBase, match_strength: "exact" as const, strength: "weak" as const }],
+    });
+    expect(strong.scorecard.skills_match_score.score).toBeGreaterThan(
+      weak.scorecard.skills_match_score.score
+    );
+  });
+
+  it("falls back to match_strength for a history entry with no strength field", () => {
+    const legacy = computeScores({
+      errors: [], formattingAudit: CLEAN_AUDIT_2, niceToHave: [],
+      mustHave: [{ ...skillBase, match_strength: "exact" as const }],
+    });
+    expect(legacy.scorecard.skills_match_score.score).toBe(100);
+  });
+});
+
 describe("buildFallbackSummary", () => {
   it("produces exactly 3 strengths and 3 improvements and a headline", () => {
     const out = computeScores({
