@@ -91,3 +91,52 @@ describe("extractBonusSkills", () => {
     expect(bonus).toEqual([]);
   });
 });
+
+import { sanitizeSkillName, isNegatedInJd } from "@/lib/keyword-match";
+
+describe("sanitizeSkillName", () => {
+  it("salvages a skill buried under a stock prefix", () => {
+    expect(sanitizeSkillName("Experience with Kubernetes")).toBe("Kubernetes");
+    expect(sanitizeSkillName("Knowledge of GraphQL")).toBe("GraphQL");
+    expect(sanitizeSkillName("Proficiency in SQL")).toBe("SQL");
+  });
+
+  it("strips a years-of qualifier", () => {
+    expect(sanitizeSkillName("5+ years of Python")).toBe("Python");
+  });
+
+  it("passes an already-atomic skill through unchanged", () => {
+    expect(sanitizeSkillName("React")).toBe("React");
+    expect(sanitizeSkillName("Amazon Web Services")).toBe("Amazon Web Services");
+  });
+
+  it("rejects a whole sentence lifted from the job description", () => {
+    expect(sanitizeSkillName("Experience building scalable distributed systems in a cloud environment")).toBeNull();
+  });
+
+  it("rejects a phrase that is still abstract after stripping", () => {
+    expect(sanitizeSkillName("Excellent communication and interpersonal abilities")).toBeNull();
+  });
+
+  it("rejects fragments carrying sentence punctuation", () => {
+    expect(sanitizeSkillName("Python, Java; and Go")).toBeNull();
+  });
+
+  it("rejects empty and whitespace input", () => {
+    expect(sanitizeSkillName("   ")).toBeNull();
+  });
+});
+
+describe("isNegatedInJd", () => {
+  it("detects a negated requirement", () => {
+    expect(isNegatedInJd("Kubernetes", "No Kubernetes experience required for this role.")).toBe(true);
+  });
+
+  it("does not treat an ordinary mention as negated", () => {
+    expect(isNegatedInJd("Kubernetes", "Deep Kubernetes experience required.")).toBe(false);
+  });
+
+  it("does not let a negation in a different sentence bleed across", () => {
+    expect(isNegatedInJd("Python", "No travel required. Python is essential.")).toBe(false);
+  });
+});

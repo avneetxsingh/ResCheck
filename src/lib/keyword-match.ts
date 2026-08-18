@@ -148,3 +148,51 @@ export function extractBonusSkills(structured: StructuredResume, jdSkillNames: s
   }
   return bonus.slice(0, 12);
 }
+
+// The prompt asks for 1-4 word skills, but a prompt is a request. Whole JD
+// sentences arriving as "skills" match nothing and depress the score, so the
+// guard lives here. Normalize first: stripping a stock prefix salvages a real
+// skill that would otherwise be discarded.
+const SKILL_PREFIXES =
+  /^(?:\d+\+?\s*years?\s+(?:of\s+)?(?:experience\s+(?:with|in)\s+)?|experience\s+(?:with|in|using)\s+|knowledge\s+of\s+|proficiency\s+(?:in|with)\s+|familiarity\s+with\s+|understanding\s+of\s+|demonstrated\s+|proven\s+|strong\s+|excellent\s+|expert(?:-level)?\s+|advanced\s+)/i;
+
+const ABSTRACT_HEAD =
+  /^(?:experience|ability|abilities|knowledge|understanding|familiarity|proficiency|skills?|expertise|background|track record|passion|desire)\b/i;
+
+export function sanitizeSkillName(raw: string): string | null {
+  let s = raw.trim();
+  if (!s) return null;
+
+  // Sentence punctuation means this is prose or a list, not one skill.
+  if (/[.;:!?]/.test(s)) return null;
+
+  let previous = "";
+  while (s !== previous) {
+    previous = s;
+    s = s.replace(SKILL_PREFIXES, "").trim();
+  }
+  if (!s) return null;
+
+  if (s.split(/\s+/).length > 4) return null;
+  if (ABSTRACT_HEAD.test(s)) return null;
+  // Compound phrases like "communication and interpersonal abilities" are not atomic skills.
+  if (/ and /.test(s)) return null;
+
+  return s;
+}
+
+const NEGATORS = /\b(no|not|without|neither|nor)\b/i;
+
+export function isNegatedInJd(skill: string, jdText: string): boolean {
+  const norm = normalizeSkill(skill);
+  if (!norm) return false;
+  // Negation does not cross a sentence boundary, so scope the check to the
+  // clause the skill actually appears in.
+  for (const clause of jdText.split(/[.;!?\n]+/)) {
+    const clauseNorm = normalizeSkill(clause);
+    if (!containsTerm(clauseNorm, norm)) continue;
+    const before = clauseNorm.slice(0, clauseNorm.indexOf(norm));
+    if (NEGATORS.test(before)) return true;
+  }
+  return false;
+}
