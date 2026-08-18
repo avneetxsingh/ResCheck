@@ -114,4 +114,35 @@ describe("segmentRoles", () => {
   it("returns an empty array when the model reported no roles", () => {
     expect(segmentRoles(structured, [])).toEqual([]);
   });
+
+  it("does not corrupt segment boundaries when two roles have the same header line", () => {
+    // Internal promotion: same employer, same title, different dates.
+    // AI trims date range and reports both with header "Backend Engineer, Acme".
+    // Without unique claiming, both would match index 0 and both would receive
+    // all remaining text, including the second role's bullets.
+    const resumeText = `Jane Doe
+EXPERIENCE
+Backend Engineer, Acme — May 2020 to July 2020
+• Built REST APIs
+Backend Engineer, Acme — Aug 2020 to Present
+• Improved performance
+SKILLS
+JavaScript`;
+
+    const structured = extractResumeStructure(resumeText);
+    const roles = segmentRoles(structured, [
+      { header_line: "Backend Engineer, Acme", employer: "Acme", title: "Backend Engineer", start: "May 2020", end: "July 2020" },
+      { header_line: "Backend Engineer, Acme", employer: "Acme", title: "Backend Engineer", start: "Aug 2020", end: "Present" },
+    ]);
+
+    expect(roles).toHaveLength(2);
+    // First role should contain only its own bullets
+    expect(roles[0].text).toContain("Built REST APIs");
+    expect(roles[0].text).not.toContain("Improved performance");
+    expect(roles[0].anchored).toBe(true);
+    // Second role should contain only its own bullets
+    expect(roles[1].text).toContain("Improved performance");
+    expect(roles[1].text).not.toContain("Built REST APIs");
+    expect(roles[1].anchored).toBe(true);
+  });
 });

@@ -129,21 +129,52 @@ export function segmentRoles(structured: StructuredResume, raw: RawRole[]): Role
   const lines = experience.flatMap((s) => s.lines);
   const collapsedLines = lines.map(collapse);
 
-  const anchorIndex = (headerLine: string): number => {
+  const findAllMatchingIndices = (headerLine: string): number[] => {
     const needle = collapse(headerLine);
-    if (!needle) return -1;
-    const exact = collapsedLines.indexOf(needle);
-    if (exact !== -1) return exact;
-    // Fall back to containment: the model sometimes trims a trailing location
+    if (!needle) return [];
+
+    const matches: number[] = [];
+    // Exact matches first
+    for (let i = 0; i < collapsedLines.length; i++) {
+      if (collapsedLines[i] === needle) {
+        matches.push(i);
+      }
+    }
+    if (matches.length > 0) return matches;
+
+    // Fallback to containment: the model sometimes trims a trailing location
     // or date fragment off the line it copies.
-    return collapsedLines.findIndex((l) => l.includes(needle) || needle.includes(l));
+    for (let i = 0; i < collapsedLines.length; i++) {
+      const l = collapsedLines[i];
+      if (l.includes(needle) || needle.includes(l)) {
+        matches.push(i);
+      }
+    }
+    return matches;
   };
 
-  const located = raw.map((r) => ({ raw: r, index: anchorIndex(r.header_line) }));
-  const anchoredIndices = located
-    .map((l) => l.index)
-    .filter((i) => i !== -1)
-    .sort((a, b) => a - b);
+  // Process roles in order, claiming indices uniquely. When a role's needle
+  // matches a line already claimed, continue searching for the next unclaimed match.
+  const claimedIndices = new Set<number>();
+  const located: Array<{ raw: RawRole; index: number }> = [];
+
+  for (const r of raw) {
+    const allMatches = findAllMatchingIndices(r.header_line);
+    let index = -1;
+    for (const m of allMatches) {
+      if (!claimedIndices.has(m)) {
+        index = m;
+        break;
+      }
+    }
+    if (index !== -1) {
+      claimedIndices.add(index);
+    }
+    located.push({ raw: r, index });
+  }
+
+  // Build sorted list of distinct claimed indices for boundary detection
+  const anchoredIndices = Array.from(claimedIndices).sort((a, b) => a - b);
 
   return located.map(({ raw: r, index }) => {
     const range: DateRange = { start: parseResumeDate(r.start), end: parseResumeDate(r.end) };
