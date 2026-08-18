@@ -50,3 +50,6 @@ docs
 *.local
 # graphify knowledge-graph output (generated)
 graphify-out/
+
+# subagent-driven-development scratch (ledger, briefs, review packages)
+.superpowers
