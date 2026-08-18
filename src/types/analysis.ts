@@ -40,7 +40,9 @@ export interface LineError {
 export interface SkillEvidence {
   kind: "exact" | "alias";
   sections: ResumeSection[];
-  roles: { title: string; months: number; ended_at: string | null }[];
+  // months is null when the role's dates did not parse — distinct from a role
+  // that genuinely lasted zero months.
+  roles: { title: string; months: number | null; ended_at: string | null }[];
 }
 
 export interface Skill {

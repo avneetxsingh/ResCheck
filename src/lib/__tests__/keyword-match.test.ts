@@ -233,6 +233,15 @@ describe("evidence-based strength", () => {
     expect(s.strength).toBe("moderate");
   });
 
+  it("reports months as null, not 0, when the matched role's dates did not parse", () => {
+    // 0 would be indistinguishable from a role that genuinely lasted no months.
+    const undated = segmentRoles(structured, [
+      { header_line: "Backend Engineer, Acme — May 2024 to Present", employer: "Acme", title: "Backend Engineer", start: "whenever", end: "whenever" },
+    ]);
+    const [s] = buildSkills(["Kubernetes"], EVIDENCE_RESUME, { structured, roles: undated, now: NOW_E });
+    expect(s.evidence?.roles[0].months).toBeNull();
+  });
+
   it("keeps match_strength populated for old-history compatibility", () => {
     const [s] = buildSkills(["Kubernetes"], EVIDENCE_RESUME, opts);
     expect(s.match_strength).toBe("exact");
@@ -242,5 +251,30 @@ describe("evidence-based strength", () => {
     const [s] = buildSkills(["Kubernetes"], EVIDENCE_RESUME);
     expect(s.strength).toBeUndefined();
     expect(s.match_strength).toBe("exact");
+  });
+});
+
+describe("evidence-based strength: alias regression", () => {
+  // The resume only ever says "k8s", never "Kubernetes" — evidence gathering
+  // must recognize the alias, not just the literal JD term, or a role that
+  // genuinely backs the skill gets rated as if it were unbacked.
+  const ALIAS_RESUME = `Jane Doe
+EXPERIENCE
+Backend Engineer, Acme — May 2024 to Present
+• Deployed workloads on k8s clusters
+SKILLS
+Node`;
+
+  const structured = extractResumeStructure(ALIAS_RESUME);
+  const roles = segmentRoles(structured, [
+    { header_line: "Backend Engineer, Acme — May 2024 to Present", employer: "Acme", title: "Backend Engineer", start: "May 2024", end: "Present" },
+  ]);
+
+  it("rates an alias-only match (k8s -> Kubernetes) in a recent dated role as strong with role evidence", () => {
+    const [s] = buildSkills(["Kubernetes"], ALIAS_RESUME, { structured, roles, now: NOW_E });
+    // Asserting strength alone would pass against a wrong implementation that
+    // happened to guess "strong" without any roles actually attached.
+    expect(s.strength).toBe("strong");
+    expect(s.evidence?.roles.length).toBeGreaterThan(0);
   });
 });

@@ -59,6 +59,20 @@ function containsTerm(haystackNorm: string, term: string): boolean {
   return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`).test(haystackNorm);
 }
 
+// One predicate for "does this text mention this skill", shared by the
+// top-level match and by evidence gathering. Filtering evidence on the literal
+// term alone rated every alias and all-word match as unbacked.
+function skillAppearsIn(haystackNorm: string, norm: string): boolean {
+  if (containsTerm(haystackNorm, norm)) return true;
+  if (aliasesFor(norm).some((a) => containsTerm(haystackNorm, a))) return true;
+  const hit = (w: string) =>
+    containsTerm(haystackNorm, w) ||
+    containsTerm(haystackNorm, w + "s") ||
+    (w.endsWith("s") && containsTerm(haystackNorm, w.slice(0, -1)));
+  const words = norm.split(" ").filter((w) => w.length > 2);
+  return words.length >= 2 && words.every(hit);
+}
+
 const SOFT_SKILLS = new Set([
   "communication", "leadership", "teamwork", "collaboration", "problem solving",
   "time management", "adaptability", "critical thinking", "mentoring",
@@ -125,7 +139,7 @@ export function buildSkills(
         totalMonths = null;
       } else {
         const matchedRoles = opts.roles.filter(
-          (r) => r.anchored && containsTerm(normalizeSkill(r.text), norm)
+          (r) => r.anchored && skillAppearsIn(normalizeSkill(r.text), norm)
         );
         const dated = matchedRoles.filter((r) => r.range.start !== null && r.range.end !== null);
         const metrics = computeWorkHistoryMetrics(
@@ -134,7 +148,7 @@ export function buildSkills(
         );
 
         const sections = (opts.structured?.sections ?? [])
-          .filter((s) => containsTerm(normalizeSkill(s.lines.join("\n")), norm))
+          .filter((s) => skillAppearsIn(normalizeSkill(s.lines.join("\n")), norm))
           .map((s) => s.name);
 
         evidence = {
@@ -145,8 +159,13 @@ export function buildSkills(
             // Duration of this role alone, so the UI can say which role carried
             // the skill longest. computeWorkHistoryMetrics on a single range
             // returns that range's own length.
-            months: computeWorkHistoryMetrics([r.range], opts.now ?? new Date())
-              .total_experience_months,
+            // null, not 0, when the dates did not parse — 0 would be
+            // indistinguishable from a role that truly lasted no months.
+            months:
+              r.range.start !== null && r.range.end !== null
+                ? computeWorkHistoryMetrics([r.range], opts.now ?? new Date())
+                    .total_experience_months
+                : null,
             ended_at: r.range.end?.precision === "present" ? null : String(r.range.end?.year ?? ""),
           })),
         };
