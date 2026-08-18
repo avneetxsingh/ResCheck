@@ -1,5 +1,6 @@
 // Dated work-history extraction. The AI reports role headers and raw date
 // strings; every date calculation happens here so the numbers are reproducible.
+import type { StructuredResume } from "./ats-extract";
 
 export interface ParsedDate {
   year: number | null; // null only when precision is "present"
@@ -98,4 +99,59 @@ export function computeWorkHistoryMetrics(ranges: DateRange[], now: Date = new D
     avg_tenure_months: Math.round(spans.reduce((sum, s) => sum + (s.to - s.from), 0) / spans.length),
     gap_months: gaps,
   };
+}
+
+// Raw role record as reported by AI-2. header_line is a verbatim copy of the
+// resume line that starts the role and is the only anchor used for segmenting.
+export interface RawRole {
+  header_line: string;
+  employer: string;
+  title: string;
+  start: string;
+  end: string;
+}
+
+export interface RoleBlock {
+  employer: string;
+  title: string;
+  range: DateRange;
+  text: string; // "" when the anchor could not be located
+  anchored: boolean;
+}
+
+// The model retypes the header, so spacing rarely survives byte-identical.
+function collapse(s: string): string {
+  return s.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+export function segmentRoles(structured: StructuredResume, raw: RawRole[]): RoleBlock[] {
+  const experience = structured.sections.filter((s) => s.name === "experience" || s.name === "projects");
+  const lines = experience.flatMap((s) => s.lines);
+  const collapsedLines = lines.map(collapse);
+
+  const anchorIndex = (headerLine: string): number => {
+    const needle = collapse(headerLine);
+    if (!needle) return -1;
+    const exact = collapsedLines.indexOf(needle);
+    if (exact !== -1) return exact;
+    // Fall back to containment: the model sometimes trims a trailing location
+    // or date fragment off the line it copies.
+    return collapsedLines.findIndex((l) => l.includes(needle) || needle.includes(l));
+  };
+
+  const located = raw.map((r) => ({ raw: r, index: anchorIndex(r.header_line) }));
+  const anchoredIndices = located
+    .map((l) => l.index)
+    .filter((i) => i !== -1)
+    .sort((a, b) => a - b);
+
+  return located.map(({ raw: r, index }) => {
+    const range: DateRange = { start: parseResumeDate(r.start), end: parseResumeDate(r.end) };
+    if (index === -1) {
+      return { employer: r.employer, title: r.title, range, text: "", anchored: false };
+    }
+    const next = anchoredIndices.find((i) => i > index);
+    const text = lines.slice(index, next ?? lines.length).join("\n");
+    return { employer: r.employer, title: r.title, range, text, anchored: true };
+  });
 }
