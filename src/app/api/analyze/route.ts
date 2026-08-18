@@ -96,7 +96,7 @@ function sse(event: string, data: unknown): Uint8Array {
 // ── Groq stage call: 25s timeout, retry once at temp 0.2, 429 retry-after ─
 type StageResult<T> =
   | { ok: true; data: T; actualModel: string }
-  | { ok: false; reason: "auth" | "failed" };
+  | { ok: false; reason: "auth" | "model_gone" | "failed" };
 
 async function callStage<T>(opts: {
   groq: ReturnType<typeof createGroqClient>;
@@ -147,6 +147,13 @@ async function callStage<T>(opts: {
       const status =
         err && typeof err === "object" ? (err as Record<string, unknown>).status : undefined;
       if (status === 401) return { ok: false, reason: "auth" };
+      // A retired or unknown model fails identically on every retry, so return
+      // immediately rather than burning the retry and reporting it as transient.
+      const detail =
+        err && typeof err === "object" ? String((err as Record<string, unknown>).message ?? "") : "";
+      if (status === 404 || (status === 400 && /decommission|does not exist|not found|unsupported/i.test(detail))) {
+        return { ok: false, reason: "model_gone" };
+      }
       if (status === 429 && i === 0) {
         const headers =
           err && typeof err === "object"
@@ -231,6 +238,17 @@ export async function POST(req: NextRequest) {
           (!errorsOutcome.ok && errorsOutcome.reason === "auth")
         ) {
           emit("error", { error: "Invalid Groq API key. Check your key and try again.", code: "INVALID_KEY" });
+          controller.close();
+          return;
+        }
+        if (
+          (!jdOutcome.ok && jdOutcome.reason === "model_gone") ||
+          (!errorsOutcome.ok && errorsOutcome.reason === "model_gone")
+        ) {
+          emit("error", {
+            error: `Groq has retired "${model}", so it can no longer run an analysis. Pick a different model in Settings.`,
+            code: "INVALID_REQUEST",
+          });
           controller.close();
           return;
         }

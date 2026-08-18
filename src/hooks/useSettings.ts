@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { DEFAULT_MODEL } from "@/lib/prompts";
+import { ALLOWED_MODELS } from "@/lib/groq";
 
 export interface AppSettings {
   apiKey: string;
@@ -26,7 +27,12 @@ function loadSettings(): AppSettings {
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
     return {
       apiKey: parsed.apiKey ?? DEFAULTS.apiKey,
-      model: parsed.model ?? DEFAULTS.model,
+      // A model ID saved before the provider retired it fails every call, so a
+      // stored value is only trusted while it is still on the allowlist.
+      model:
+        parsed.model && ALLOWED_MODELS.has(parsed.model)
+          ? parsed.model
+          : DEFAULTS.model,
       systemPrompt: parsed.systemPrompt ?? DEFAULTS.systemPrompt,
     };
   } catch {

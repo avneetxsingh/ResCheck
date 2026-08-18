@@ -1,4 +1,4 @@
-export const DEFAULT_MODEL = "llama-3.1-8b-instant";
+export const DEFAULT_MODEL = "openai/gpt-oss-20b";
 
 // ── Pipeline v2 specialist prompts ────────────────────────────────────────
 // Three narrow prompts replace the single do-everything prompt. Each keeps
