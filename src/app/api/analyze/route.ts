@@ -304,7 +304,14 @@ export async function POST(req: NextRequest) {
         // Stage 4 — deterministic matching + scoring (code)
         const mustHave = buildSkills(jd.must_have.filter(notNegated), resumeText, skillOpts);
         const niceToHave = buildSkills(jd.nice_to_have.filter(notNegated), resumeText, skillOpts);
-        const bonusSkills = extractBonusSkills(structured, [...jd.must_have, ...jd.nice_to_have]);
+        // A skill the posting explicitly says it does NOT require is a genuine
+        // bonus (resume has it, job doesn't need it) — the same negation filter
+        // used for mustHave/niceToHave must apply here too, or a negated term
+        // stays in the list and silently suppresses its own bonus surfacing.
+        const bonusSkills = extractBonusSkills(structured, [
+          ...jd.must_have.filter(notNegated),
+          ...jd.nice_to_have.filter(notNegated),
+        ]);
         const scoring = computeScores({
           errors, formattingAudit: audit, mustHave, niceToHave,
           parseWarningCount: structured.warnings.length,
