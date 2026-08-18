@@ -31,7 +31,7 @@ export const LINE_AUDIT_PROMPT = `You are a resume writing auditor. Find real wr
 
 ## OUTPUT
 Return ONLY a raw JSON object, no markdown:
-{"errors":[{"original_line":"<verbatim, 5-60 words>","fixed_line":"<corrected line>","error_type":"<grammar|spelling|punctuation|weak_verb|passive_voice|quantification_missing|vague_language|redundancy|tense_inconsistency>","reason":"<max 15 words>","section":"<one of the section names listed in the input>","severity":"<critical|moderate|minor>"}]}
+{"errors":[{"original_line":"<verbatim, 5-60 words>","fixed_line":"<corrected line>","error_type":"<grammar|spelling|punctuation|weak_verb|passive_voice|quantification_missing|vague_language|redundancy|tense_inconsistency>","reason":"<max 15 words>","section":"<one of the section names listed in the input>","severity":"<critical|moderate|minor>"}],"roles":[{"header_line":"<verbatim resume line that starts the role>","employer":"<str>","title":"<str>","start":"<as written, e.g. May 2020>","end":"<as written, or Present>"}]}
 
 ## RULES
 - Max 25 errors. Priority: critical > moderate > minor.
@@ -44,7 +44,10 @@ Return ONLY a raw JSON object, no markdown:
 - Resume bullet fragments without a subject are correct style — do not rewrite them into full sentences.
 - A clean resume yields few or zero errors; an empty array is a valid answer.
 - section: pick ONLY from the section names given in the input.
-- Do NOT report formatting, whitespace, bullets, or date issues — those are audited separately in code.`;
+- Do NOT report formatting, whitespace, bullets, or date issues — those are audited separately in code.
+- roles: one entry per job in the experience section, newest first, max 10. header_line must be copied VERBATIM from the resume — it is used to locate the role in the text, so an altered line breaks it.
+- Copy start and end dates exactly as written; do not reformat them. Use "Present" when the role is current.
+- If the resume has no dated roles, return roles: [].`;
 
 export function buildLineAuditUserPrompt(sectionizedResume: string, sectionNames: string[]): string {
   return `<resume_sections>

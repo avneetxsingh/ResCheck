@@ -7,8 +7,9 @@ import {
 } from "@/lib/prompts";
 import { extractResumeStructure, toAtsExtraction, buildSectionizedText, sectionNames } from "@/lib/ats-extract";
 import { runFormattingAudit } from "@/lib/formatting-audit";
-import { buildSkills, extractBonusSkills, clipJd } from "@/lib/keyword-match";
+import { buildSkills, extractBonusSkills, clipJd, sanitizeSkillName, isNegatedInJd } from "@/lib/keyword-match";
 import { computeScores, buildFallbackSummary, AUDIT_KEYS } from "@/lib/scoring";
+import { segmentRoles } from "@/lib/work-history";
 import type { ApiError } from "@/types/api";
 import type { RawAnalysisResult } from "@/types/analysis";
 
@@ -39,8 +40,14 @@ const JD_BUDGET_CHARS = 4_000; //     ~1.0K tokens (AI-1 only)
 const JdSkillsSchema = z
   .object({
     job_title: z.string().catch(""),
-    must_have: z.array(z.string()).catch([]).transform((a) => a.map((s) => s.trim()).filter(Boolean).slice(0, 15)),
-    nice_to_have: z.array(z.string()).catch([]).transform((a) => a.map((s) => s.trim()).filter(Boolean).slice(0, 10)),
+    must_have: z
+      .array(z.string())
+      .catch([])
+      .transform((a) => a.map(sanitizeSkillName).filter((s): s is string => s !== null).slice(0, 15)),
+    nice_to_have: z
+      .array(z.string())
+      .catch([])
+      .transform((a) => a.map(sanitizeSkillName).filter((s): s is string => s !== null).slice(0, 10)),
     jd_quality: z.enum(["rich", "moderate", "sparse"]).catch("moderate"),
   })
   .catch({ job_title: "", must_have: [], nice_to_have: [], jd_quality: "moderate" });
@@ -74,9 +81,26 @@ const LineErrorSchema = z.object({
   severity: z.enum(["critical", "moderate", "minor"]).catch("minor"),
 });
 
+// Raw role record as reported by AI-2. header_line is the only anchor used to
+// locate the role in the resume text, so every field just falls back to "" —
+// segmentRoles treats an empty header_line as unanchored, never a thrown error.
+const RawRoleSchema = z.object({
+  header_line: z.string().catch(""),
+  employer: z.string().catch(""),
+  title: z.string().catch(""),
+  start: z.string().catch(""),
+  end: z.string().catch(""),
+});
+
 const LineErrorsSchema = z
-  .object({ errors: z.array(LineErrorSchema).catch([]).transform((a) => a.slice(0, 40)) })
-  .catch({ errors: [] });
+  .object({
+    errors: z.array(LineErrorSchema).catch([]).transform((a) => a.slice(0, 40)),
+    roles: z
+      .array(RawRoleSchema)
+      .catch([])
+      .transform((a) => a.filter((r) => r.header_line.trim().length > 0).slice(0, 10)),
+  })
+  .catch({ errors: [], roles: [] });
 
 const SummarySchema = z
   .object({
@@ -264,11 +288,22 @@ export async function POST(req: NextRequest) {
         if (!jdOutcome.ok) warn("Couldn't extract skills from the job description this run — the Skills tab will be empty.");
 
         const errors = errorsOutcome.ok ? errorsOutcome.data.errors : [];
+        const rawRoles = errorsOutcome.ok ? errorsOutcome.data.roles : [];
         if (!errorsOutcome.ok) warn("The writing audit didn't complete — no line issues are shown, and grammar/impact scores assume none.");
 
+        const roles = segmentRoles(structured, rawRoles);
+        if (rawRoles.length > 0 && roles.every((r) => !r.anchored)) {
+          warn("Couldn't locate your job entries in the resume text — skill recency isn't factored into this run.");
+        }
+        const skillOpts = { structured, roles };
+        // "No Kubernetes experience required" must not register as a requirement.
+        // This runs here rather than in the zod transform because the transform
+        // has no access to the job-description text.
+        const notNegated = (name: string) => !isNegatedInJd(name, jdText);
+
         // Stage 4 — deterministic matching + scoring (code)
-        const mustHave = buildSkills(jd.must_have, resumeText);
-        const niceToHave = buildSkills(jd.nice_to_have, resumeText);
+        const mustHave = buildSkills(jd.must_have.filter(notNegated), resumeText, skillOpts);
+        const niceToHave = buildSkills(jd.nice_to_have.filter(notNegated), resumeText, skillOpts);
         const bonusSkills = extractBonusSkills(structured, [...jd.must_have, ...jd.nice_to_have]);
         const scoring = computeScores({
           errors, formattingAudit: audit, mustHave, niceToHave,
