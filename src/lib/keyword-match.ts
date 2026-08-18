@@ -173,10 +173,10 @@ export function sanitizeSkillName(raw: string): string | null {
   }
   if (!s) return null;
 
-  if (s.split(/\s+/).length > 4) return null;
+  // Real skills top out around "Amazon Web Services" (3 words). Phrases with 4+ words
+  // are reliably abstract lists or compound descriptions, not atomic skills.
+  if (s.split(/\s+/).length > 3) return null;
   if (ABSTRACT_HEAD.test(s)) return null;
-  // Compound phrases like "communication and interpersonal abilities" are not atomic skills.
-  if (/ and /.test(s)) return null;
 
   return s;
 }
@@ -186,13 +186,17 @@ const NEGATORS = /\b(no|not|without|neither|nor)\b/i;
 export function isNegatedInJd(skill: string, jdText: string): boolean {
   const norm = normalizeSkill(skill);
   if (!norm) return false;
-  // Negation does not cross a sentence boundary, so scope the check to the
-  // clause the skill actually appears in.
-  for (const clause of jdText.split(/[.;!?\n]+/)) {
+  // Commas separate clauses too ("No Java required, Python is essential"), and
+  // one affirmative mention outranks a negated one — a skill counts as negated
+  // only when EVERY occurrence is negated. Dropping a requirement the candidate
+  // really needs is the costly direction of error.
+  let sawOccurrence = false;
+  for (const clause of jdText.split(/[.,;!?\n]+/)) {
     const clauseNorm = normalizeSkill(clause);
     if (!containsTerm(clauseNorm, norm)) continue;
+    sawOccurrence = true;
     const before = clauseNorm.slice(0, clauseNorm.indexOf(norm));
-    if (NEGATORS.test(before)) return true;
+    if (!NEGATORS.test(before)) return false;
   }
-  return false;
+  return sawOccurrence;
 }

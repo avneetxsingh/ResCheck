@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSkills, extractBonusSkills, clipJd } from "@/lib/keyword-match";
+import { buildSkills, extractBonusSkills, clipJd, sanitizeSkillName, isNegatedInJd } from "@/lib/keyword-match";
 import { extractResumeStructure } from "@/lib/ats-extract";
 
 const RESUME = `Jane Doe
@@ -92,8 +92,6 @@ describe("extractBonusSkills", () => {
   });
 });
 
-import { sanitizeSkillName, isNegatedInJd } from "@/lib/keyword-match";
-
 describe("sanitizeSkillName", () => {
   it("salvages a skill buried under a stock prefix", () => {
     expect(sanitizeSkillName("Experience with Kubernetes")).toBe("Kubernetes");
@@ -138,5 +136,17 @@ describe("isNegatedInJd", () => {
 
   it("does not let a negation in a different sentence bleed across", () => {
     expect(isNegatedInJd("Python", "No travel required. Python is essential.")).toBe(false);
+  });
+
+  it("does not let a negation bleed across a comma", () => {
+    expect(isNegatedInJd("Python", "No Java required, Python is essential")).toBe(false);
+  });
+
+  it("treats a skill as required when any occurrence is affirmative", () => {
+    expect(isNegatedInJd("SQL", "No SQL certification required. Must have strong SQL skills.")).toBe(false);
+  });
+
+  it("still negates when every occurrence is negated", () => {
+    expect(isNegatedInJd("Kubernetes", "No Kubernetes needed, and no Kubernetes experience expected.")).toBe(true);
   });
 });
