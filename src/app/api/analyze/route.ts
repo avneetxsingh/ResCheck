@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createGroqClient, GROQ_MODEL, ALLOWED_MODELS } from "@/lib/groq";
+import { DEFAULT_PROVIDER, PROVIDERS, isProviderId, resolveProvider } from "@/lib/providers";
+import type { Provider } from "@/lib/providers";
 import {
   JD_SKILLS_PROMPT, LINE_AUDIT_PROMPT, SUMMARY_PROMPT,
   buildJdSkillsUserPrompt, buildLineAuditUserPrompt, buildSummaryUserPrompt,
@@ -22,19 +23,14 @@ export const maxDuration = 60;
 const BodySchema = z.object({
   resume_text: z.string().min(100, "Resume text too short"),
   job_description: z.string().min(1, "Job description cannot be empty"),
-  model: z
+  provider: z
     .string()
     .optional()
-    .refine((v) => v === undefined || ALLOWED_MODELS.has(v), {
-      message: "Unknown model ID. Use a supported Groq model.",
-    }),
+    .refine((v) => v === undefined || isProviderId(v), { message: "Unknown provider." }),
+  // Validated against the resolved provider's own list once both are known —
+  // a model is only meaningful relative to the provider that serves it.
+  model: z.string().optional(),
 });
-
-// ── Input budgets ──────────────────────────────────────────────────────────
-// Free tier is 6,000 tokens/min on the default model. Explicit budgets, not
-// magic slices: ~4 chars/token.
-const RESUME_BUDGET_CHARS = 12_000; // ~3.0K tokens (AI-2 only)
-const JD_BUDGET_CHARS = 4_000; //     ~1.0K tokens (AI-1 only)
 
 // ── Per-stage Zod schemas — every field and sub-object catches ────────────
 const JdSkillsSchema = z
@@ -117,13 +113,14 @@ function sse(event: string, data: unknown): Uint8Array {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
-// ── Groq stage call: 25s timeout, retry once at temp 0.2, 429 retry-after ─
+// ── Stage call: 25s timeout, retry once at temp 0.2, rate-limit delay once ─
 type StageResult<T> =
   | { ok: true; data: T; actualModel: string }
   | { ok: false; reason: "auth" | "model_gone" | "failed" };
 
 async function callStage<T>(opts: {
-  groq: ReturnType<typeof createGroqClient>;
+  provider: Provider;
+  apiKey: string;
   model: string;
   systemPrompt: string;
   userPrompt: string;
@@ -135,23 +132,14 @@ async function callStage<T>(opts: {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 25_000);
     try {
-      const completion = await opts.groq.chat.completions.create(
-        {
-          model: opts.model,
-          messages: [
-            { role: "system", content: opts.systemPrompt },
-            { role: "user", content: opts.userPrompt },
-          ],
-          response_format: { type: "json_object" },
-          temperature,
-          max_tokens: opts.maxTokens,
-        },
-        { signal: controller.signal }
-      );
-      return {
-        rawText: completion.choices[0]?.message?.content ?? "",
-        actualModel: completion.model ?? opts.model,
-      };
+      return await opts.provider.complete(opts.apiKey, {
+        model: opts.model,
+        systemPrompt: opts.systemPrompt,
+        userPrompt: opts.userPrompt,
+        temperature,
+        maxTokens: opts.maxTokens,
+        signal: controller.signal,
+      });
     } finally {
       clearTimeout(timer);
     }
@@ -168,25 +156,17 @@ async function callStage<T>(opts: {
       // .catch()-everywhere means this is unreachable, but stay defensive:
       if (i === 0) opts.onWarning("The model returned something unusable — retrying.");
     } catch (err: unknown) {
-      const status =
-        err && typeof err === "object" ? (err as Record<string, unknown>).status : undefined;
-      if (status === 401) return { ok: false, reason: "auth" };
+      // The adapter owns every vendor-specific error shape; this branch only
+      // knows the four kinds, so a new provider never means editing the route.
+      const { kind, retryAfterSeconds } = opts.provider.classifyError(err);
+      if (kind === "auth") return { ok: false, reason: "auth" };
       // A retired or unknown model fails identically on every retry, so return
       // immediately rather than burning the retry and reporting it as transient.
-      const detail =
-        err && typeof err === "object" ? String((err as Record<string, unknown>).message ?? "") : "";
-      if (status === 404 || (status === 400 && /decommission|model_not_found|does not exist/i.test(detail))) {
-        return { ok: false, reason: "model_gone" };
-      }
-      if (status === 429 && i === 0) {
-        const headers =
-          err && typeof err === "object"
-            ? ((err as Record<string, unknown>).headers as Record<string, string> | undefined)
-            : undefined;
-        const retryAfter = Number(headers?.["retry-after"] ?? NaN);
-        if (Number.isFinite(retryAfter) && retryAfter > 0 && retryAfter <= 20) {
-          opts.onWarning(`Groq is rate-limiting — pausing ${retryAfter}s, then retrying.`);
-          await new Promise((r) => setTimeout(r, retryAfter * 1000));
+      if (kind === "model_gone") return { ok: false, reason: "model_gone" };
+      if (kind === "rate_limit" && i === 0) {
+        if (retryAfterSeconds !== undefined && retryAfterSeconds > 0 && retryAfterSeconds <= 20) {
+          opts.onWarning(`${opts.provider.label} is rate-limiting — pausing ${retryAfterSeconds}s, then retrying.`);
+          await new Promise((r) => setTimeout(r, retryAfterSeconds * 1000));
           continue;
         }
         return { ok: false, reason: "failed" };
@@ -199,10 +179,12 @@ async function callStage<T>(opts: {
 
 // ── Route ──────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const apiKey = req.headers.get("x-groq-api-key");
+  // x-groq-api-key is the pre-abstraction header name. A browser holding a
+  // cached bundle keeps working until it reloads.
+  const apiKey = req.headers.get("x-provider-api-key") ?? req.headers.get("x-groq-api-key");
   if (!apiKey || apiKey.trim().length === 0) {
     return NextResponse.json<ApiError>(
-      { error: "Groq API key required. Pass it via the x-groq-api-key header.", code: "INVALID_KEY" },
+      { error: "API key required. Add one in Settings.", code: "INVALID_KEY" },
       { status: 401 }
     );
   }
@@ -216,12 +198,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json<ApiError>({ error: message, code: "INVALID_REQUEST" }, { status: 400 });
   }
 
-  const groq = createGroqClient(apiKey.trim());
-  const model = body.model ?? GROQ_MODEL;
-  const resumeText = body.resume_text.slice(0, RESUME_BUDGET_CHARS);
+  // A request arriving with only the legacy header predates provider support,
+  // so it is a Groq request regardless of what the default is now.
+  const legacyGroqOnly = !req.headers.get("x-provider-api-key") && !body.provider;
+  const provider =
+    resolveProvider(body.provider) ?? (legacyGroqOnly ? PROVIDERS.groq : PROVIDERS[DEFAULT_PROVIDER]);
+
+  const model = body.model ?? provider.defaultModel;
+  if (!provider.models.some((m) => m.id === model)) {
+    return NextResponse.json<ApiError>(
+      {
+        error: `${provider.label} does not offer "${model}". Pick a different model in Settings.`,
+        code: "INVALID_REQUEST",
+      },
+      { status: 400 }
+    );
+  }
+
+  // Clips are a provider property: they exist to fit a free-tier ceiling.
+  const resumeText = body.resume_text.slice(0, provider.budgets.resumeChars);
   // Requirements-aware clip: long postings keep their requirements section
   // instead of losing it to head-truncation.
-  const jdText = clipJd(body.job_description, JD_BUDGET_CHARS);
+  const jdText = clipJd(body.job_description, provider.budgets.jdChars);
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -242,14 +240,14 @@ export async function POST(req: NextRequest) {
         // Stage 2+3 — AI-1 (JD skills) ∥ AI-2 (line audit)
         emit("stage", { stage: "skills", progress: 25 });
         const jdPromise = callStage({
-          groq, model, systemPrompt: JD_SKILLS_PROMPT,
+          provider, apiKey: apiKey.trim(), model, systemPrompt: JD_SKILLS_PROMPT,
           userPrompt: buildJdSkillsUserPrompt(jdText),
-          schema: JdSkillsSchema, maxTokens: 500, onWarning: warn,
+          schema: JdSkillsSchema, maxTokens: provider.budgets.maxOutputTokens.jdSkills, onWarning: warn,
         });
         const errorsPromise = callStage({
-          groq, model, systemPrompt: LINE_AUDIT_PROMPT,
+          provider, apiKey: apiKey.trim(), model, systemPrompt: LINE_AUDIT_PROMPT,
           userPrompt: buildLineAuditUserPrompt(buildSectionizedText(structured), sectionNames(structured)),
-          schema: LineErrorsSchema, maxTokens: 1800, onWarning: warn,
+          schema: LineErrorsSchema, maxTokens: provider.budgets.maxOutputTokens.lineAudit, onWarning: warn,
         });
 
         const jdOutcome = await jdPromise;
@@ -261,7 +259,7 @@ export async function POST(req: NextRequest) {
           (!jdOutcome.ok && jdOutcome.reason === "auth") ||
           (!errorsOutcome.ok && errorsOutcome.reason === "auth")
         ) {
-          emit("error", { error: "Invalid Groq API key. Check your key and try again.", code: "INVALID_KEY" });
+          emit("error", { error: `Invalid ${provider.label} API key. Check your key and try again.`, code: "INVALID_KEY" });
           controller.close();
           return;
         }
@@ -270,7 +268,7 @@ export async function POST(req: NextRequest) {
           (!errorsOutcome.ok && errorsOutcome.reason === "model_gone")
         ) {
           emit("error", {
-            error: `Groq has retired "${model}", so it can no longer run an analysis. Pick a different model in Settings.`,
+            error: `${provider.label} no longer serves "${model}", so it cannot run an analysis. Pick a different model in Settings.`,
             code: "INVALID_REQUEST",
           });
           controller.close();
@@ -339,9 +337,9 @@ export async function POST(req: NextRequest) {
         ].join("\n");
 
         const summaryOutcome = await callStage({
-          groq, model, systemPrompt: SUMMARY_PROMPT,
+          provider, apiKey: apiKey.trim(), model, systemPrompt: SUMMARY_PROMPT,
           userPrompt: buildSummaryUserPrompt(digest),
-          schema: SummarySchema, maxTokens: 500, onWarning: warn,
+          schema: SummarySchema, maxTokens: provider.budgets.maxOutputTokens.summary, onWarning: warn,
         });
 
         const fallback = buildFallbackSummary(scoring, mustHave, errors, bonusSkills);

@@ -1,5 +1,3 @@
-export const DEFAULT_MODEL = "openai/gpt-oss-20b";
-
 // ── Pipeline v2 specialist prompts ────────────────────────────────────────
 // Three narrow prompts replace the single do-everything prompt. Each keeps
 // the XML-delimited user content (injection defense) and the "never invent,

@@ -17,11 +17,11 @@ interface AnalysisFormProps {
 }
 
 export function AnalysisForm({ onResult }: AnalysisFormProps) {
-  const { settings, hydrated } = useSettings();
+  const { settings, apiKey, hydrated } = useSettings();
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [jobDescription, setJobDescription] = useState("");
-  const { stage, progress, result, error, warnings, analyze } = useAnalysis(settings.apiKey);
+  const { stage, progress, result, error, warnings, analyze } = useAnalysis(apiKey);
 
   const reportedRef = useRef<AnalysisResult | null>(null);
   useEffect(() => {
@@ -32,7 +32,7 @@ export function AnalysisForm({ onResult }: AnalysisFormProps) {
   }, [result, onResult]);
 
   const isRunning = stage === "parsing" || stage === "analyzing";
-  const hasKey = settings.apiKey.length > 10;
+  const hasKey = apiKey.length > 10;
   const canSubmit = hasKey && file !== null && jobDescription.trim().length > 0 && !isRunning;
 
   const handleSubmit = async (e: React.FormEvent) => {

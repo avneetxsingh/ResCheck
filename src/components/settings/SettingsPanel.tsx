@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useSettings } from "@/hooks/useSettings";
 import { useHistory } from "@/hooks/useHistory";
-import { GROQ_MODELS } from "@/lib/groq";
+import { PROVIDER_INFO as PROVIDERS, PROVIDER_IDS } from "@/lib/providers/catalog";
+import type { ProviderId } from "@/lib/providers/catalog";
 import { JD_SKILLS_PROMPT, LINE_AUDIT_PROMPT, SUMMARY_PROMPT } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,7 @@ export function SettingsPanel() {
   const { settings, saveSettings, resetAll, hydrated, defaults } = useSettings();
   const { history: entries, clearAll } = useHistory();
 
+  const [provider, setProvider] = useState<ProviderId>(defaults.provider);
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [model, setModel] = useState("");
@@ -25,16 +27,33 @@ export function SettingsPanel() {
   // Sync local state when settings hydrate
   useEffect(() => {
     if (hydrated) {
-      setApiKey(settings.apiKey);
+      setProvider(settings.provider);
+      setApiKey(settings.apiKeys[settings.provider] ?? "");
       setModel(settings.model);
     }
   }, [hydrated, settings]);
 
-  const isValidKey = apiKey.startsWith("gsk_") && apiKey.length > 20;
-  const hasUnsavedChanges = apiKey !== settings.apiKey || model !== settings.model;
+  const active = PROVIDERS[provider];
+  const isValidKey = apiKey.startsWith(active.keyPrefix) && apiKey.length > 20;
+  const hasUnsavedChanges =
+    provider !== settings.provider ||
+    apiKey !== (settings.apiKeys[settings.provider] ?? "") ||
+    model !== settings.model;
+
+  // Switching provider carries that provider's own key and default model —
+  // never the other provider's, which would fail on the first call.
+  const handleProviderChange = (next: ProviderId) => {
+    setProvider(next);
+    setApiKey(settings.apiKeys[next] ?? "");
+    setModel(PROVIDERS[next].defaultModel);
+  };
 
   const handleSave = () => {
-    saveSettings({ apiKey, model });
+    saveSettings({
+      provider,
+      apiKeys: { ...settings.apiKeys, [provider]: apiKey },
+      model,
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -46,6 +65,7 @@ export function SettingsPanel() {
 
   const handleResetAll = () => {
     resetAll();
+    setProvider(defaults.provider);
     setApiKey("");
     setModel(defaults.model);
     setConfirmResetAll(false);
@@ -55,16 +75,53 @@ export function SettingsPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Provider */}
+      <Card className="border-border/50 shadow-none">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base">Provider</CardTitle>
+          <CardDescription>
+            Each provider keeps its own key and models. Gemini has far more free
+            headroom; Groq is faster per token.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-2">
+            {PROVIDER_IDS.map((id) => (
+              <label
+                key={id}
+                className={cn(
+                  "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                  provider === id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40"
+                )}
+              >
+                <input
+                  type="radio"
+                  name="provider"
+                  value={id}
+                  checked={provider === id}
+                  onChange={() => handleProviderChange(id)}
+                  className="accent-primary"
+                />
+                <div>
+                  <p className="text-sm font-medium">{PROVIDERS[id].label}</p>
+                  <p className="text-xs text-muted-foreground">{PROVIDERS[id].keyHint}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* API Key */}
       <Card className="border-border/50 shadow-none">
         <CardHeader className="pb-4">
           <CardTitle className="text-base flex items-center gap-2">
             <Lock className="w-4 h-4 text-muted-foreground" />
-            Groq API key
+            {active.keyLabel}
           </CardTitle>
           <CardDescription>
-            Saved to this browser&apos;s localStorage and sent straight to Groq
-            with each analysis — there&apos;s no server to store it on.
+            Saved to this browser&apos;s localStorage and sent straight to{" "}
+            {active.label} with each analysis — there&apos;s no server to store it on.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -73,7 +130,7 @@ export function SettingsPanel() {
               type={showKey ? "text" : "password"}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="gsk_..."
+              placeholder={`${active.keyPrefix}...`}
               className={cn(
                 "pr-20 font-mono text-sm",
                 isValidKey && "border-primary focus-visible:ring-primary"
@@ -96,12 +153,12 @@ export function SettingsPanel() {
           </div>
           <p className="text-xs text-muted-foreground">
             <a
-              href="https://console.groq.com/keys"
+              href={active.keyUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-0.5 text-primary hover:underline"
             >
-              Get a free Groq API key
+              Get a free {active.label} API key
               <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
             </a>
           </p>
@@ -118,7 +175,7 @@ export function SettingsPanel() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-2">
-            {GROQ_MODELS.map((m) => (
+            {active.models.map((m) => (
               <label
                 key={m.id}
                 className={cn(

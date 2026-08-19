@@ -1,61 +1,85 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { DEFAULT_MODEL } from "@/lib/prompts";
-import { ALLOWED_MODELS } from "@/lib/groq";
+import { DEFAULT_PROVIDER, PROVIDER_INFO as PROVIDERS, isProviderId } from "@/lib/providers/catalog";
+import type { ProviderId } from "@/lib/providers/catalog";
 
 export interface AppSettings {
-  apiKey: string;
+  provider: ProviderId;
+  // One key per provider, so holding both does not mean pasting one back and forth.
+  apiKeys: Partial<Record<ProviderId, string>>;
   model: string;
+  // Pipeline v2: prompts are server-owned and read-only in the UI; the stored
+  // field remains for localStorage backward compatibility only.
   systemPrompt: string;
 }
 
 const STORAGE_KEY = "rescheck_settings";
 
 const DEFAULTS: AppSettings = {
-  apiKey: "",
-  model: DEFAULT_MODEL,
-  // Pipeline v2: prompts are server-owned and read-only in the UI; the stored
-  // field remains for localStorage backward compatibility only.
+  provider: DEFAULT_PROVIDER,
+  apiKeys: {},
+  model: PROVIDERS[DEFAULT_PROVIDER].defaultModel,
   systemPrompt: "",
 };
+
+interface LegacySettings {
+  apiKey?: string;
+  provider?: string;
+  apiKeys?: Partial<Record<string, string>>;
+  model?: string;
+  systemPrompt?: string;
+}
 
 function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULTS };
-    const parsed = JSON.parse(raw) as Partial<AppSettings>;
-    return {
-      apiKey: parsed.apiKey ?? DEFAULTS.apiKey,
-      // A model ID saved before the provider retired it fails every call, so a
-      // stored value is only trusted while it is still on the allowlist.
-      model:
-        parsed.model && ALLOWED_MODELS.has(parsed.model)
-          ? parsed.model
-          : DEFAULTS.model,
-      systemPrompt: parsed.systemPrompt ?? DEFAULTS.systemPrompt,
-    };
+    if (!raw) return { ...DEFAULTS, apiKeys: {} };
+    const parsed = JSON.parse(raw) as LegacySettings;
+
+    // A stored single apiKey predates provider support, so it is a Groq key.
+    // Pointing that user at Gemini would silently strand them without a key.
+    const legacyKey = typeof parsed.apiKey === "string" ? parsed.apiKey : "";
+    const apiKeys: Partial<Record<ProviderId, string>> = {};
+    for (const id of Object.keys(PROVIDERS) as ProviderId[]) {
+      const stored = parsed.apiKeys?.[id];
+      if (typeof stored === "string" && stored) apiKeys[id] = stored;
+    }
+    if (legacyKey && !apiKeys.groq) apiKeys.groq = legacyKey;
+
+    const provider = isProviderId(parsed.provider)
+      ? parsed.provider
+      : legacyKey
+        ? "groq"
+        : DEFAULTS.provider;
+
+    // A model ID is only trusted while its provider still serves it. This is
+    // the check that made the 2026-08-16 Groq shutdown recoverable.
+    const known = PROVIDERS[provider].models.some((m) => m.id === parsed.model);
+    const model = known && parsed.model ? parsed.model : PROVIDERS[provider].defaultModel;
+
+    return { provider, apiKeys, model, systemPrompt: parsed.systemPrompt ?? "" };
   } catch {
-    return { ...DEFAULTS };
+    return { ...DEFAULTS, apiKeys: {} };
   }
 }
 
 export function useSettings() {
-  const [settings, setSettingsState] = useState<AppSettings>({ ...DEFAULTS });
+  const [settings, setSettingsState] = useState<AppSettings>({ ...DEFAULTS, apiKeys: {} });
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    // Migrate old standalone API key if present
+    const loaded = loadSettings();
+    // Migrate the pre-provider standalone key, then retire it.
     const oldKey = localStorage.getItem("rescheck_api_key");
-    if (oldKey) {
-      const loaded = loadSettings();
-      if (!loaded.apiKey) loaded.apiKey = oldKey;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
-      localStorage.removeItem("rescheck_api_key");
-      setSettingsState(loaded);
-    } else {
-      setSettingsState(loadSettings());
+    if (oldKey && !loaded.apiKeys.groq) {
+      loaded.apiKeys = { ...loaded.apiKeys, groq: oldKey };
+      loaded.provider = "groq";
+      loaded.model = PROVIDERS.groq.defaultModel;
     }
+    if (oldKey) localStorage.removeItem("rescheck_api_key");
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+    setSettingsState(loaded);
     setHydrated(true);
   }, []);
 
@@ -67,25 +91,43 @@ export function useSettings() {
     });
   }, []);
 
-  const resetPrompt = useCallback(() => {
-    saveSettings({ systemPrompt: DEFAULTS.systemPrompt });
-  }, [saveSettings]);
+  // Switching provider carries its own model, never the other provider's.
+  const setProvider = useCallback(
+    (provider: ProviderId) => {
+      saveSettings({ provider, model: PROVIDERS[provider].defaultModel });
+    },
+    [saveSettings]
+  );
+
+  const setApiKey = useCallback(
+    (provider: ProviderId, key: string) => {
+      setSettingsState((prev) => {
+        const next = { ...prev, apiKeys: { ...prev.apiKeys, [provider]: key } };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+    },
+    []
+  );
 
   const resetAll = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
-    setSettingsState({ ...DEFAULTS });
+    setSettingsState({ ...DEFAULTS, apiKeys: {} });
   }, []);
 
-  const isPromptCustomized = settings.systemPrompt !== DEFAULTS.systemPrompt;
-  const isModelCustomized = settings.model !== DEFAULTS.model;
+  const activeProvider = PROVIDERS[settings.provider];
+  const apiKey = settings.apiKeys[settings.provider] ?? "";
+  const isModelCustomized = settings.model !== activeProvider.defaultModel;
 
   return {
     settings,
+    activeProvider,
+    apiKey,
     saveSettings,
-    resetPrompt,
+    setProvider,
+    setApiKey,
     resetAll,
     hydrated,
-    isPromptCustomized,
     isModelCustomized,
     defaults: DEFAULTS,
   };

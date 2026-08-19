@@ -95,7 +95,7 @@ export function useAnalysis(apiKey: string) {
   const analyze = useCallback(
     async (file: File, jobDescription: string) => {
       if (!apiKey) {
-        setError("Add your Groq API key in Settings first.");
+        setError("Add your API key in Settings first.");
         return;
       }
 
@@ -142,11 +142,12 @@ export function useAnalysis(apiKey: string) {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-groq-api-key": apiKey,
+            "x-provider-api-key": apiKey,
           },
           body: JSON.stringify({
             resume_text: resumeText,
             job_description: jobDescription,
+            provider: settings.provider,
             model: settings.model,
           }),
           signal: controller.signal,
@@ -235,7 +236,7 @@ export function useAnalysis(apiKey: string) {
         );
       }
     },
-    [apiKey, addEntry, settings.model]
+    [apiKey, addEntry, settings.provider, settings.model]
   );
 
   const reset = useCallback(() => {
