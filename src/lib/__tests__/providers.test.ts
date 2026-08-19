@@ -34,6 +34,15 @@ describe("classifyError — groq", () => {
   const c = (e: unknown) => PROVIDERS.groq.classifyError(e);
 
   it("maps 401 to auth", () => expect(c({ status: 401 }).kind).toBe("auth"));
+  it("maps a real rejected-key response to auth", () => {
+    // Verbatim from a real rejected call on 2026-08-18.
+    expect(
+      c({
+        status: 401,
+        message: '401 {"error":{"message":"Invalid API Key","type":"invalid_request_error","code":"invalid_api_key"}}',
+      }).kind
+    ).toBe("auth");
+  });
   it("maps 404 to model_gone", () => expect(c({ status: 404 }).kind).toBe("model_gone"));
   it("maps a decommissioned-model 400 to model_gone", () => {
     expect(c({ status: 400, message: "model_not_found: llama-3.1-8b-instant" }).kind).toBe("model_gone");
@@ -58,9 +67,15 @@ describe("classifyError — gemini", () => {
 
   it("maps 403 to auth", () => expect(c({ status: 403 }).kind).toBe("auth"));
   it("maps a bad-key 400 to auth, not failed", () => {
-    // Gemini reports an invalid key as 400 INVALID_ARGUMENT, so status alone
-    // would misfile it and burn a pointless retry.
-    expect(c({ status: 400, message: "API key not valid. Please pass a valid API key." }).kind).toBe("auth");
+    // Verbatim from a real rejected call on 2026-08-18. Gemini reports an
+    // invalid key as 400 INVALID_ARGUMENT, not 401, so status alone would
+    // misfile it as transient and burn a pointless retry.
+    const real = {
+      status: 400,
+      message:
+        '{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID","domain":"googleapis.com"}]}}',
+    };
+    expect(c(real).kind).toBe("auth");
   });
   it("maps an unknown model to model_gone", () => {
     expect(c({ status: 404, message: "models/gemini-x is not found" }).kind).toBe("model_gone");
