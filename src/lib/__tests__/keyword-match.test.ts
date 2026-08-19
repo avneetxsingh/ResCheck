@@ -306,3 +306,24 @@ describe("regressions from the branch code review", () => {
     expect(isNegatedInJd("Java", "no javascript, java is required")).toBe(false);
   });
 });
+
+describe("JD skill list coercion", () => {
+  // Mirrors the route's SkillNameSchema: one malformed element must not
+  // discard its valid siblings.
+  it("keeps valid skills when the model wraps one in an object", () => {
+    const raw: unknown[] = [{ name: "Python" }, "SQL", { skill: "Docker" }, 42, "React"];
+    const coerced = raw
+      .map((v) =>
+        typeof v === "string"
+          ? v
+          : v && typeof v === "object" && typeof (v as Record<string, unknown>).name === "string"
+            ? String((v as Record<string, unknown>).name)
+            : v && typeof v === "object" && typeof (v as Record<string, unknown>).skill === "string"
+              ? String((v as Record<string, unknown>).skill)
+              : ""
+      )
+      .map(sanitizeSkillName)
+      .filter((s): s is string => s !== null);
+    expect(coerced).toEqual(["Python", "SQL", "Docker", "React"]);
+  });
+});

@@ -33,17 +33,33 @@ const BodySchema = z.object({
 });
 
 // ── Per-stage Zod schemas — every field and sub-object catches ────────────
+// The model does not reliably emit plain strings — it sometimes wraps a skill
+// in an object. With only an array-level catch, ONE malformed element threw
+// away every valid skill beside it, which is why extraction worked on some
+// runs and silently returned nothing on others. Catching per item keeps the
+// siblings: a bad element becomes "" and is dropped by sanitizeSkillName.
+const SkillNameSchema = z
+  .union([
+    z.string(),
+    z.object({ name: z.string() }).transform((o) => o.name),
+    z.object({ skill: z.string() }).transform((o) => o.skill),
+    z.object({ text: z.string() }).transform((o) => o.text),
+  ])
+  .catch("");
+
+const skillList = (max: number) =>
+  z
+    .array(SkillNameSchema)
+    .catch([])
+    .transform((a) =>
+      a.map(sanitizeSkillName).filter((s): s is string => s !== null).slice(0, max)
+    );
+
 const JdSkillsSchema = z
   .object({
     job_title: z.string().catch(""),
-    must_have: z
-      .array(z.string())
-      .catch([])
-      .transform((a) => a.map(sanitizeSkillName).filter((s): s is string => s !== null).slice(0, 15)),
-    nice_to_have: z
-      .array(z.string())
-      .catch([])
-      .transform((a) => a.map(sanitizeSkillName).filter((s): s is string => s !== null).slice(0, 10)),
+    must_have: skillList(15),
+    nice_to_have: skillList(10),
     jd_quality: z.enum(["rich", "moderate", "sparse"]).catch("moderate"),
   })
   .catch({ job_title: "", must_have: [], nice_to_have: [], jd_quality: "moderate" });
@@ -326,6 +342,12 @@ export async function POST(req: NextRequest) {
         // Stage 4 — deterministic matching + scoring (code)
         const mustHave = buildSkills(jd.must_have.filter(notNegated), resumeText, skillOpts);
         const niceToHave = buildSkills(jd.nice_to_have.filter(notNegated), resumeText, skillOpts);
+        // A posting the model called rich or moderate should yield requirements.
+        // Zero here means they were extracted and then dropped downstream —
+        // worth saying, because the Skills tab just looks empty otherwise.
+        if (jdOutcome.ok && jd.jd_quality !== "sparse" && mustHave.length === 0 && niceToHave.length === 0) {
+          warn("The job description parsed, but no usable requirements came out of it — the Skills tab will be empty this run.");
+        }
         // A skill the posting explicitly says it does NOT require is a genuine
         // bonus (resume has it, job doesn't need it) — the same negation filter
         // used for mustHave/niceToHave must apply here too, or a negated term
