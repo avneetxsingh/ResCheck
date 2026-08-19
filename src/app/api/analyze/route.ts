@@ -116,7 +116,7 @@ function sse(event: string, data: unknown): Uint8Array {
 // ── Stage call: 25s timeout, retry once at temp 0.2, rate-limit delay once ─
 type StageResult<T> =
   | { ok: true; data: T; actualModel: string }
-  | { ok: false; reason: "auth" | "model_gone" | "failed" };
+  | { ok: false; reason: "auth" | "model_gone" | "failed"; detail?: string };
 
 async function callStage<T>(opts: {
   provider: Provider;
@@ -147,6 +147,7 @@ async function callStage<T>(opts: {
 
   // temperature 0 first; the retry MUST use 0.2 so it can produce different output
   const temps = [0, 0.2];
+  let lastDetail = "";
   for (let i = 0; i < temps.length; i++) {
     try {
       const { rawText, actualModel } = await attempt(temps[i]);
@@ -158,6 +159,7 @@ async function callStage<T>(opts: {
     } catch (err: unknown) {
       // The adapter owns every vendor-specific error shape; this branch only
       // knows the four kinds, so a new provider never means editing the route.
+      lastDetail = err instanceof Error ? err.message : String(err);
       const { kind, retryAfterSeconds } = opts.provider.classifyError(err);
       if (kind === "auth") return { ok: false, reason: "auth" };
       // A retired or unknown model fails identically on every retry, so return
@@ -179,7 +181,7 @@ async function callStage<T>(opts: {
       }
     }
   }
-  return { ok: false, reason: "failed" };
+  return { ok: false, reason: "failed", detail: lastDetail };
 }
 
 // ── Route ──────────────────────────────────────────────────────────────────
@@ -280,7 +282,16 @@ export async function POST(req: NextRequest) {
           return;
         }
         if (!jdOutcome.ok && !errorsOutcome.ok) {
-          emit("error", { error: "The model couldn't complete the analysis, even after retries. Try again in a minute, or switch models in Settings.", code: "UNKNOWN" });
+          // Quota exhaustion and a genuine model failure both land here, and
+          // they need opposite responses from the user, so name the cause.
+          const detail = (!jdOutcome.ok && jdOutcome.detail) || (!errorsOutcome.ok && errorsOutcome.detail) || "";
+          const quota = /rate.?limit|quota|429|tokens per day|requests per day|TPD|RPD/i.test(detail);
+          emit("error", {
+            error: quota
+              ? `You've hit ${provider.label}'s rate or daily quota limit, so no model call could complete. Free-tier quotas reset on a daily cycle — wait and retry, or switch provider in Settings. (${detail.slice(0, 200)})`
+              : `The model couldn't complete the analysis, even after retries. Try again in a minute, or switch models in Settings.${detail ? ` (${detail.slice(0, 200)})` : ""}`,
+            code: quota ? "RATE_LIMITED" : "UNKNOWN",
+          });
           controller.close();
           return;
         }
