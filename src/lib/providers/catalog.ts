@@ -60,7 +60,10 @@ export const GEMINI_INFO: ProviderInfo = {
   budgets: {
     resumeChars: 40_000,
     jdChars: 20_000,
-    maxOutputTokens: { jdSkills: 1_000, lineAudit: 3_000, summary: 800 },
+    // Generous because on Gemini 3 models thinking tokens are drawn from this
+    // same allowance: too tight and the model thinks itself into an empty
+    // response. Trivial against ~250K TPM.
+    maxOutputTokens: { jdSkills: 4_000, lineAudit: 12_000, summary: 3_000 },
   },
 };
 

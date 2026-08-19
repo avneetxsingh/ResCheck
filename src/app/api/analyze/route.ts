@@ -171,7 +171,12 @@ async function callStage<T>(opts: {
         }
         return { ok: false, reason: "failed" };
       }
-      if (i === 0) opts.onWarning("A model call failed — retrying once.");
+      if (i === 0) {
+        // Naming the cause matters: an unexplained "failed" hid a model
+        // returning empty output for an entire debugging session.
+        const why = err instanceof Error ? err.message : String(err);
+        opts.onWarning(`A model call failed — retrying once. (${why.slice(0, 160)})`);
+      }
     }
   }
   return { ok: false, reason: "failed" };

@@ -19,10 +19,18 @@ export const geminiProvider: Provider = {
         abortSignal: req.signal,
       },
     });
-    return {
-      rawText: response.text ?? "",
-      actualModel: response.modelVersion ?? req.model,
-    };
+    const rawText = response.text ?? "";
+    if (!rawText.trim()) {
+      // Gemini 3 models think before answering, and thinking tokens are drawn
+      // from maxOutputTokens — too small a budget yields an EMPTY response
+      // rather than an error. Say so plainly instead of letting "" reach
+      // JSON.parse and surface as an unexplained generic failure.
+      const reason = response.candidates?.[0]?.finishReason ?? "unknown";
+      throw new Error(
+        `${req.model} returned no text (finishReason: ${reason}). The output budget was likely spent on thinking before any content was produced.`
+      );
+    }
+    return { rawText, actualModel: response.modelVersion ?? req.model };
   },
 
   classifyError(err: unknown): ClassifiedError {
