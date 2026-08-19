@@ -256,7 +256,8 @@ export async function POST(req: NextRequest) {
           userPrompt: buildLineAuditUserPrompt(
             buildSectionizedText(structured),
             sectionNames(structured),
-            provider.budgets.maxErrors
+            provider.budgets.maxErrors,
+            jdText.slice(0, provider.budgets.jdContextChars)
           ),
           schema: LineErrorsSchema, maxTokens: provider.budgets.maxOutputTokens.lineAudit, onWarning: warn,
         });

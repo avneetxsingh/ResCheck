@@ -28,14 +28,19 @@ export const GROQ_INFO: ProviderInfo = {
   keyUrl: "https://console.groq.com/keys",
   keyPrefix: "gsk_",
   models: [
-    { id: "openai/gpt-oss-20b", label: "GPT-OSS 20B", note: "Fastest" },
-    { id: "openai/gpt-oss-120b", label: "GPT-OSS 120B", note: "Slower · sharpest audit" },
+    { id: "openai/gpt-oss-120b", label: "GPT-OSS 120B", note: "Sharpest · default" },
+    { id: "openai/gpt-oss-20b", label: "GPT-OSS 20B", note: "Faster, less thorough" },
   ],
-  defaultModel: "openai/gpt-oss-20b",
+  // 120b is the better judge and carries a higher per-minute ceiling on the
+  // same free tier, so it wins on quality and headroom at once.
+  defaultModel: "openai/gpt-oss-120b",
   // The free tier is 6,000 tokens/minute, which is what these clips exist for.
   budgets: {
     resumeChars: 12_000,
     jdChars: 4_000,
+    // The audit gets a trimmed copy of the posting so it can judge a bullet
+    // against the job, not just against grammar.
+    jdContextChars: 1_500,
     // Headroom over the ~1300 tokens 12 errors + 10 roles actually need. Groq
     // bills real usage, not the ceiling, so a margin here costs no TPM.
     // Headroom for reasoning tokens, which share this budget on gpt-oss even
@@ -68,6 +73,7 @@ export const GEMINI_INFO: ProviderInfo = {
   budgets: {
     resumeChars: 40_000,
     jdChars: 20_000,
+    jdContextChars: 6_000,
     // Generous because on Gemini 3 models thinking tokens are drawn from this
     // same allowance: too tight and the model thinks itself into an empty
     // response. Trivial against ~250K TPM.
