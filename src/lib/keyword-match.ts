@@ -131,7 +131,8 @@ export function buildSkills(
     let lastUsed: number | null | undefined;
     let totalMonths: number | null | undefined;
 
-    if (opts.roles) {
+    const haveRoles = Boolean(opts.roles && opts.roles.length > 0);
+    if (haveRoles && opts.roles) {
       if (legacyStrength === "missing") {
         evidence = null;
         strength = "missing";
@@ -142,6 +143,11 @@ export function buildSkills(
           (r) => r.anchored && skillAppearsIn(normalizeSkill(r.text), norm)
         );
         const dated = matchedRoles.filter((r) => r.range.start !== null && r.range.end !== null);
+        // Year-only dates are anchored to January, so their recency is a guess.
+        // Honour the precision tag rather than rating a guess "strong".
+        const monthPrecise = dated.every(
+          (r) => r.range.start?.precision !== "year" && r.range.end?.precision !== "year"
+        );
         const metrics = computeWorkHistoryMetrics(
           dated.map((r) => r.range),
           opts.now ?? new Date()
@@ -166,7 +172,10 @@ export function buildSkills(
                 ? computeWorkHistoryMetrics([r.range], opts.now ?? new Date())
                     .total_experience_months
                 : null,
-            ended_at: r.range.end?.precision === "present" ? null : String(r.range.end?.year ?? ""),
+            ended_at:
+              r.range.end && r.range.end.precision !== "present" && r.range.end.year !== null
+                ? String(r.range.end.year)
+                : null,
           })),
         };
         lastUsed = matchedRoles.length > 0 ? metrics.last_used_months_ago : null;
@@ -177,6 +186,7 @@ export function buildSkills(
         } else if (dated.length === 0) {
           strength = "moderate"; // in a role, but recency is unverifiable
         } else if (
+          monthPrecise &&
           metrics.last_used_months_ago !== null &&
           metrics.last_used_months_ago <= RECENT_MONTHS &&
           metrics.total_experience_months >= SUBSTANTIAL_MONTHS
@@ -193,7 +203,7 @@ export function buildSkills(
       present_in_resume: present,
       category: classifySkill(norm),
       match_strength: legacyStrength,
-      ...(opts.roles
+      ...(haveRoles
         ? { strength, evidence, last_used_months_ago: lastUsed, total_months: totalMonths }
         : {}),
     });
@@ -257,8 +267,11 @@ export function sanitizeSkillName(raw: string): string | null {
   let s = raw.trim();
   if (!s) return null;
 
-  // Sentence punctuation means this is prose or a list, not one skill.
-  if (/[.;:!?]/.test(s)) return null;
+  // Sentence punctuation means this is prose or a list, not one skill. A period
+  // only reads as sentence punctuation when whitespace follows it: "Node.js",
+  // ".NET" and "Ph.D." are real skills, and both normalizeSkill and
+  // ALIAS_GROUPS depend on them surviving this guard.
+  if (/[;:!?]/.test(s) || /\.\s/.test(s)) return null;
 
   let previous = "";
   while (s !== previous) {
@@ -287,9 +300,13 @@ export function isNegatedInJd(skill: string, jdText: string): boolean {
   let sawOccurrence = false;
   for (const clause of jdText.split(/[.,;!?\n]+/)) {
     const clauseNorm = normalizeSkill(clause);
-    if (!containsTerm(clauseNorm, norm)) continue;
+    // Locate the word-boundary occurrence, not a raw substring: indexOf("java")
+    // lands inside "javascript" and misreads the negator scope.
+    const esc = norm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const hit = new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`).exec(clauseNorm);
+    if (!hit) continue;
     sawOccurrence = true;
-    const before = clauseNorm.slice(0, clauseNorm.indexOf(norm));
+    const before = clauseNorm.slice(0, hit.index);
     if (!NEGATORS.test(before)) return false;
   }
   return sawOccurrence;

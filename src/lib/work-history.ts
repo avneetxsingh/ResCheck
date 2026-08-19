@@ -84,19 +84,23 @@ export function computeWorkHistoryMetrics(ranges: DateRange[], now: Date = new D
       continue;
     }
     if (last) {
-      const gap = span.from - last.to;
+      // Endpoints are inclusive, so adjacent months (Dec then Jan) are a gap of 0.
+      const gap = span.from - last.to - 1;
       if (gap > 6) gaps.push(gap);
     }
     merged.push({ ...span });
   }
 
-  const total = merged.reduce((sum, s) => sum + (s.to - s.from), 0);
+  // Inclusive of both endpoint months: Jan 2020 - Dec 2020 is 12 months, not 11.
+  const total = merged.reduce((sum, s) => sum + (s.to - s.from + 1), 0);
   const latestEnd = Math.max(...merged.map((s) => s.to));
 
   return {
     total_experience_months: total,
     last_used_months_ago: Math.max(0, nowAbs - latestEnd),
-    avg_tenure_months: Math.round(spans.reduce((sum, s) => sum + (s.to - s.from), 0) / spans.length),
+    avg_tenure_months: Math.round(
+      spans.reduce((sum, s) => sum + (s.to - s.from + 1), 0) / spans.length
+    ),
     gap_months: gaps,
   };
 }
@@ -126,7 +130,14 @@ function collapse(s: string): string {
 
 export function segmentRoles(structured: StructuredResume, raw: RawRole[]): RoleBlock[] {
   const experience = structured.sections.filter((s) => s.name === "experience" || s.name === "projects");
-  const lines = experience.flatMap((s) => s.lines);
+  // Section starts are hard boundaries: without them the last experience role
+  // absorbed the projects section and dated that work to itself.
+  const lines: string[] = [];
+  const sectionStarts: number[] = [];
+  for (const section of experience) {
+    sectionStarts.push(lines.length);
+    lines.push(...section.lines);
+  }
   const collapsedLines = lines.map(collapse);
 
   const findAllMatchingIndices = (headerLine: string): number[] => {
@@ -143,10 +154,12 @@ export function segmentRoles(structured: StructuredResume, raw: RawRole[]): Role
     if (matches.length > 0) return matches;
 
     // Fallback to containment: the model sometimes trims a trailing location
-    // or date fragment off the line it copies.
+    // or date fragment off the line it copies. One-directional only, and long
+    // enough to be distinctive — a bare company name must not satisfy a full
+    // header, which previously let one role claim another's line.
+    if (needle.length < 8) return matches;
     for (let i = 0; i < collapsedLines.length; i++) {
-      const l = collapsedLines[i];
-      if (l.includes(needle) || needle.includes(l)) {
+      if (collapsedLines[i].includes(needle)) {
         matches.push(i);
       }
     }
@@ -181,8 +194,10 @@ export function segmentRoles(structured: StructuredResume, raw: RawRole[]): Role
     if (index === -1) {
       return { employer: r.employer, title: r.title, range, text: "", anchored: false };
     }
-    const next = anchoredIndices.find((i) => i > index);
-    const text = lines.slice(index, next ?? lines.length).join("\n");
+    const nextAnchor = anchoredIndices.find((i) => i > index);
+    const nextSection = sectionStarts.find((i) => i > index);
+    const end = Math.min(nextAnchor ?? lines.length, nextSection ?? lines.length);
+    const text = lines.slice(index, end).join("\n");
     return { employer: r.employer, title: r.title, range, text, anchored: true };
   });
 }

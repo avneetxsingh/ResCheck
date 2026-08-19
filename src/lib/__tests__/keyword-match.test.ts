@@ -278,3 +278,31 @@ Node`;
     expect(s.evidence?.roles.length).toBeGreaterThan(0);
   });
 });
+
+describe("regressions from the branch code review", () => {
+  it("keeps dotted skill names instead of deleting them as sentences", () => {
+    // A blanket "." rejection silently removed every dotted requirement before
+    // matching ran, even though ALIAS_GROUPS lists node.js/next.js as forms.
+    for (const skill of ["Node.js", ".NET", "Vue.js", "Next.js", "React.js", "Ph.D."]) {
+      expect(sanitizeSkillName(skill)).toBe(skill);
+    }
+  });
+
+  it("still rejects real prose containing a sentence period", () => {
+    expect(sanitizeSkillName("Build systems. Ship them")).toBeNull();
+  });
+
+  it("omits evidence fields when no roles could be located", () => {
+    // An empty array is truthy: this used to re-rate every matched skill
+    // "weak" (0.3) instead of "exact" (1.0), silently collapsing the score.
+    const structured = extractResumeStructure(RESUME);
+    const [s] = buildSkills(["React"], RESUME, { structured, roles: [] });
+    expect("strength" in s).toBe(false);
+    expect(s.match_strength).toBe("exact");
+  });
+
+  it("does not read a negator across a word boundary match", () => {
+    // indexOf("java") lands inside "javascript" and misread the scope.
+    expect(isNegatedInJd("Java", "no javascript, java is required")).toBe(false);
+  });
+});

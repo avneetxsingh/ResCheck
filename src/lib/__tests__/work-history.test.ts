@@ -31,8 +31,9 @@ describe("parseResumeDate", () => {
 
 describe("computeWorkHistoryMetrics", () => {
   it("unions overlapping ranges instead of summing them", () => {
-    // 2018-01..2021-01 (36mo) fully contains 2019-01..2020-01 (12mo).
-    // Summing would give 48; the union is 36.
+    // 2018-01..2021-01 fully contains 2019-01..2020-01. Months are counted
+    // inclusively, so the outer span is 37 (Jan 2018 through Jan 2021) and the
+    // union is 37 — summing the two spans would wrongly give 50.
     const m = computeWorkHistoryMetrics(
       [
         { start: { year: 2018, month: 1, precision: "month" }, end: { year: 2021, month: 1, precision: "month" } },
@@ -40,7 +41,7 @@ describe("computeWorkHistoryMetrics", () => {
       ],
       NOW
     );
-    expect(m.total_experience_months).toBe(36);
+    expect(m.total_experience_months).toBe(37);
   });
 
   it("treats a Present end as running to now and reports zero recency", () => {
@@ -48,7 +49,8 @@ describe("computeWorkHistoryMetrics", () => {
       [{ start: { year: 2025, month: 8, precision: "month" }, end: { year: null, month: null, precision: "present" } }],
       NOW
     );
-    expect(m.total_experience_months).toBe(12);
+    // Aug 2025 through Aug 2026 inclusive is 13 months.
+    expect(m.total_experience_months).toBe(13);
     expect(m.last_used_months_ago).toBe(0);
   });
 
@@ -60,7 +62,8 @@ describe("computeWorkHistoryMetrics", () => {
       ],
       NOW
     );
-    expect(m.gap_months).toEqual([17]);
+    // Idle months are Feb 2019 through May 2020 inclusive: 16, not 17.
+    expect(m.gap_months).toEqual([16]);
   });
 
   it("ignores ranges whose dates did not parse", () => {
@@ -144,5 +147,26 @@ JavaScript`;
     expect(roles[1].text).toContain("Improved performance");
     expect(roles[1].text).not.toContain("Built REST APIs");
     expect(roles[1].anchored).toBe(true);
+  });
+});
+
+describe("section boundaries", () => {
+  const RESUME_WITH_PROJECTS = `Jane Doe
+EXPERIENCE
+Backend Engineer, Acme — Jan 2019 to Dec 2021
+• Shipped the billing service
+PROJECTS
+Open Source CLI
+• Built a Rust CLI with 2k stars`;
+
+  it("does not let a role absorb the projects section", () => {
+    // Flattening experience and projects into one array dated project work to
+    // the last job, giving skills evidence from a role they were never in.
+    const structured = extractResumeStructure(RESUME_WITH_PROJECTS);
+    const [role] = segmentRoles(structured, [
+      { header_line: "Backend Engineer, Acme — Jan 2019 to Dec 2021", employer: "Acme", title: "Backend Engineer", start: "Jan 2019", end: "Dec 2021" },
+    ]);
+    expect(role.text).toContain("Shipped the billing service");
+    expect(role.text).not.toContain("Rust CLI");
   });
 });

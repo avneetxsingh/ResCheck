@@ -56,7 +56,7 @@ function SkillRow({ skill }: { skill: Skill }) {
               : ` \u00b7 last used ${months} ${months === 1 ? "month" : "months"} ago`)}
         </p>
       )}
-      {skill.strength === "weak" && (
+      {skill.strength === "weak" && skill.evidence && (
         <p className="text-xs text-muted-foreground">
           Listed in your skills section, but no dated role backs it up.
         </p>

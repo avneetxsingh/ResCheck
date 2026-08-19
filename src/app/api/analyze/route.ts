@@ -175,7 +175,7 @@ async function callStage<T>(opts: {
       // immediately rather than burning the retry and reporting it as transient.
       const detail =
         err && typeof err === "object" ? String((err as Record<string, unknown>).message ?? "") : "";
-      if (status === 404 || (status === 400 && /decommission|does not exist|not found|unsupported/i.test(detail))) {
+      if (status === 404 || (status === 400 && /decommission|model_not_found|does not exist/i.test(detail))) {
         return { ok: false, reason: "model_gone" };
       }
       if (status === 429 && i === 0) {
@@ -292,10 +292,13 @@ export async function POST(req: NextRequest) {
         if (!errorsOutcome.ok) warn("The writing audit didn't complete — no line issues are shown, and grammar/impact scores assume none.");
 
         const roles = segmentRoles(structured, rawRoles);
-        if (rawRoles.length > 0 && roles.every((r) => !r.anchored)) {
-          warn("Couldn't locate your job entries in the resume text — skill recency isn't factored into this run.");
+        // Only anchored roles carry text, so only they can evidence a skill.
+        // Passing unanchored ones would rate every match "weak" on no evidence.
+        const anchoredRoles = roles.filter((r) => r.anchored);
+        if (errorsOutcome.ok && anchoredRoles.length === 0) {
+          warn("Couldn't locate your job entries in the resume text — skills are matched without recency this run.");
         }
-        const skillOpts = { structured, roles };
+        const skillOpts = { structured, roles: anchoredRoles };
         // "No Kubernetes experience required" must not register as a requirement.
         // This runs here rather than in the zod transform because the transform
         // has no access to the job-description text.
