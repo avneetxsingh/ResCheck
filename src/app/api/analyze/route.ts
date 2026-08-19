@@ -165,7 +165,7 @@ async function callStage<T>(opts: {
       if (kind === "model_gone") return { ok: false, reason: "model_gone" };
       if (kind === "rate_limit" && i === 0) {
         if (retryAfterSeconds !== undefined && retryAfterSeconds > 0 && retryAfterSeconds <= 20) {
-          opts.onWarning(`${opts.provider.label} is rate-limiting — pausing ${retryAfterSeconds}s, then retrying.`);
+          opts.onWarning(`${opts.provider.label} is busy — pausing ${retryAfterSeconds}s, then retrying.`);
           await new Promise((r) => setTimeout(r, retryAfterSeconds * 1000));
           continue;
         }

@@ -37,6 +37,10 @@ export const groqProvider: Provider = {
     if (status === 404 || (status === 400 && /decommission|model_not_found|does not exist/i.test(detail))) {
       return { kind: "model_gone" };
     }
+    // Capacity shedding, not quota — transient, but needs a pause before retry.
+    if (status === 503 || status === 502) {
+      return { kind: "rate_limit", retryAfterSeconds: 6 };
+    }
     if (status === 429) {
       const headers =
         err && typeof err === "object"

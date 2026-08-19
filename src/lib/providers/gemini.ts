@@ -48,6 +48,12 @@ export const geminiProvider: Provider = {
     if (status === 404 || (status === 400 && /not found|is not supported|unsupported model/i.test(detail))) {
       return { kind: "model_gone" };
     }
+    // 503 UNAVAILABLE is Gemini shedding load ("experiencing high demand").
+    // It is transient, but retrying instantly just hits the same wall, so give
+    // it a real pause. Google sends no retry hint here, hence a fixed value.
+    if (status === 503 || /unavailable|high demand|overloaded/i.test(detail)) {
+      return { kind: "rate_limit", retryAfterSeconds: 6 };
+    }
     if (status === 429 || /resource[ _-]?exhausted|quota/i.test(detail)) {
       // RESOURCE_EXHAUSTED sometimes carries retryDelay ("31s"). Report a delay
       // only when the provider actually gave one — a guess is worse than none.

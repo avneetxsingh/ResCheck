@@ -4,6 +4,8 @@
 
 export type ProviderId = "gemini" | "groq";
 
+// "rate_limit" means transient-and-worth-waiting: quota exhaustion AND
+// capacity overload both land here, because the useful response is the same.
 export type ProviderErrorKind = "auth" | "rate_limit" | "model_gone" | "failed";
 
 export interface ClassifiedError {

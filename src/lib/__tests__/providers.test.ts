@@ -59,6 +59,9 @@ describe("classifyError — groq", () => {
   it("reports no delay when 429 carries none", () => {
     expect(c({ status: 429 }).retryAfterSeconds).toBeUndefined();
   });
+  it("treats 503 capacity shedding as transient with a pause", () => {
+    expect(c({ status: 503 })).toEqual({ kind: "rate_limit", retryAfterSeconds: 6 });
+  });
   it("falls through to failed", () => expect(c({ status: 500 }).kind).toBe("failed"));
 });
 
@@ -80,8 +83,12 @@ describe("classifyError — gemini", () => {
   it("maps an unknown model to model_gone", () => {
     expect(c({ status: 404, message: "models/gemini-x is not found" }).kind).toBe("model_gone");
   });
-  it("keeps a transient 503 mentioning not found retryable", () => {
-    expect(c({ status: 503, message: "backend not found, try again" }).kind).toBe("failed");
+  it("keeps a transient 503 mentioning not found retryable, not a dead model", () => {
+    // The point is that "not found" in a 5xx must never be read as a retired
+    // model, which would end the analysis and send the user to Settings.
+    const r = c({ status: 503, message: "backend not found, try again" });
+    expect(r.kind).not.toBe("model_gone");
+    expect(r.kind).toBe("rate_limit");
   });
   it("parses retryDelay out of a quota error", () => {
     expect(c({ status: 429, message: 'RESOURCE_EXHAUSTED {"retryDelay":"31s"}' })).toEqual({
@@ -95,4 +102,25 @@ describe("classifyError — gemini", () => {
     expect(r.retryAfterSeconds).toBeUndefined();
   });
   it("falls through to failed", () => expect(c({ status: 500 }).kind).toBe("failed"));
+});
+
+describe("gemini overload handling", () => {
+  const c = (e: unknown) => PROVIDERS.gemini.classifyError(e);
+
+  it("treats a real high-demand 503 as transient, not a hard failure", () => {
+    // Verbatim from a real run on 2026-08-18. Classified "failed" this would
+    // retry instantly against an overloaded model and fail again.
+    const real = {
+      status: 503,
+      message:
+        '{"error":{"code":503,"message":"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.","status":"UNAVAILABLE"}}',
+    };
+    const r = c(real);
+    expect(r.kind).toBe("rate_limit");
+    expect(r.retryAfterSeconds).toBe(6);
+  });
+
+  it("still reports a genuine 500 as failed", () => {
+    expect(c({ status: 500, message: "internal" }).kind).toBe("failed");
+  });
 });
