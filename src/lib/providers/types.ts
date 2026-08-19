@@ -27,6 +27,10 @@ export interface Budgets {
   resumeChars: number;
   jdChars: number;
   maxOutputTokens: { jdSkills: number; lineAudit: number; summary: number };
+  // Line errors the audit may return. Each costs ~70 output tokens, so asking
+  // for more than the output cap can hold truncates the JSON and the whole
+  // call is rejected — better to ask for fewer and get them all.
+  maxErrors: number;
 }
 
 export interface CompletionRequest {

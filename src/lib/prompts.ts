@@ -32,7 +32,7 @@ Return ONLY a raw JSON object, no markdown:
 {"errors":[{"original_line":"<verbatim, 5-60 words>","fixed_line":"<corrected line>","error_type":"<grammar|spelling|punctuation|weak_verb|passive_voice|quantification_missing|vague_language|redundancy|tense_inconsistency>","reason":"<max 15 words>","section":"<one of the section names listed in the input>","severity":"<critical|moderate|minor>"}],"roles":[{"header_line":"<verbatim resume line that starts the role>","employer":"<str>","title":"<str>","start":"<as written, e.g. May 2020>","end":"<as written, or Present>"}]}
 
 ## RULES
-- Max 25 errors. Priority: critical > moderate > minor.
+- Priority: critical > moderate > minor. The user message states the maximum.
 - CRITICAL: misspelled words, major grammar, wrong tense for past roles.
 - MODERATE: weak verbs (helped, worked on, was responsible for), passive voice, achievement bullets with no numbers, vague claims.
 - MINOR: punctuation.
@@ -47,12 +47,19 @@ Return ONLY a raw JSON object, no markdown:
 - Copy start and end dates exactly as written; do not reformat them. Use "Present" when the role is current.
 - If the resume has no dated roles, return roles: [].`;
 
-export function buildLineAuditUserPrompt(sectionizedResume: string, sectionNames: string[]): string {
+export function buildLineAuditUserPrompt(
+  sectionizedResume: string,
+  sectionNames: string[],
+  maxErrors: number
+): string {
   return `<resume_sections>
 ${sectionizedResume.trim()}
 </resume_sections>
 
 Valid section names: ${sectionNames.join(", ")}
+
+Return at most ${maxErrors} errors, highest severity first. Exceeding this
+truncates the response and loses every error, so stay under it.
 
 Audit the resume writing. Return ONLY the JSON object.`;
 }

@@ -253,7 +253,11 @@ export async function POST(req: NextRequest) {
         });
         const errorsPromise = callStage({
           provider, apiKey: apiKey.trim(), model, systemPrompt: LINE_AUDIT_PROMPT,
-          userPrompt: buildLineAuditUserPrompt(buildSectionizedText(structured), sectionNames(structured)),
+          userPrompt: buildLineAuditUserPrompt(
+            buildSectionizedText(structured),
+            sectionNames(structured),
+            provider.budgets.maxErrors
+          ),
           schema: LineErrorsSchema, maxTokens: provider.budgets.maxOutputTokens.lineAudit, onWarning: warn,
         });
 

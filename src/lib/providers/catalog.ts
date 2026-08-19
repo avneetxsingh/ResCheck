@@ -36,7 +36,12 @@ export const GROQ_INFO: ProviderInfo = {
   budgets: {
     resumeChars: 12_000,
     jdChars: 4_000,
-    maxOutputTokens: { jdSkills: 500, lineAudit: 1_800, summary: 500 },
+    // Headroom over the ~1300 tokens 12 errors + 10 roles actually need. Groq
+    // bills real usage, not the ceiling, so a margin here costs no TPM.
+    maxOutputTokens: { jdSkills: 800, lineAudit: 2_400, summary: 700 },
+    // 12 errors (~840 tok) + 10 roles (~300 tok) fits 1800 with room to spare.
+    // 25 needed ~2050 and truncated every time, which Groq rejects outright.
+    maxErrors: 12,
   },
 };
 
@@ -64,6 +69,7 @@ export const GEMINI_INFO: ProviderInfo = {
     // same allowance: too tight and the model thinks itself into an empty
     // response. Trivial against ~250K TPM.
     maxOutputTokens: { jdSkills: 4_000, lineAudit: 12_000, summary: 3_000 },
+    maxErrors: 25,
   },
 };
 
