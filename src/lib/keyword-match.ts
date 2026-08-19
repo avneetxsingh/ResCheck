@@ -121,7 +121,14 @@ export function buildSkills(
         containsTerm(resumeNorm, w + "s") ||
         (w.endsWith("s") && containsTerm(resumeNorm, w.slice(0, -1)));
       const words = norm.split(" ").filter((w) => w.length > 2);
-      if (words.length >= 2 && words.every(wordHit)) legacyStrength = "partial";
+      if (words.length >= 2 && words.every(wordHit)) {
+        // Every word of the skill is in the resume, so it IS present. Leaving
+        // this false undercounted keyword_density_score, which reads
+        // present_in_resume — a skill could rate "strong" and still be
+        // tallied as missing.
+        present = true;
+        legacyStrength = "partial";
+      }
     }
 
     // Evidence is only derivable when role blocks were supplied. Without them

@@ -170,3 +170,36 @@ Open Source CLI
     expect(role.text).not.toContain("Rust CLI");
   });
 });
+
+describe("anchor resolution", () => {
+  const PROMOTION_RESUME = `Jane Doe
+EXPERIENCE
+Senior Software Engineer, Acme — Jan 2021 to Present
+• Led the platform team
+Software Engineer, Acme — Jan 2018 to Dec 2020
+• Built the ingestion service
+• Partnered with the acme platform engineer team on integrations`;
+
+  const structured = extractResumeStructure(PROMOTION_RESUME);
+
+  it("anchors a junior role to its own header, not the senior one", () => {
+    // "Software Engineer, Acme" is a substring of "Senior Software Engineer,
+    // Acme" — taking the first containment match dated this role wrongly.
+    const [junior] = segmentRoles(structured, [
+      { header_line: "Software Engineer, Acme", employer: "Acme", title: "Software Engineer", start: "Jan 2018", end: "Dec 2020" },
+    ]);
+    expect(junior.anchored).toBe(true);
+    expect(junior.text).toContain("Built the ingestion service");
+    expect(junior.text).not.toContain("Led the platform team");
+  });
+
+  it("never claims a bullet line as a role header", () => {
+    const [role] = segmentRoles(structured, [
+      { header_line: "acme platform engineer", employer: "Acme", title: "Engineer", start: "Jan 2018", end: "Dec 2020" },
+    ]);
+    // The only containment match is a bullet, so this must degrade to
+    // unanchored rather than silently anchoring mid-role.
+    expect(role.anchored).toBe(false);
+    expect(role.text).toBe("");
+  });
+});

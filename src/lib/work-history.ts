@@ -123,6 +123,8 @@ export interface RoleBlock {
   anchored: boolean;
 }
 
+const BULLET_LINE = /^[•\-*\u2013\u2014\u25aa\u00b7]/;
+
 // The model retypes the header, so spacing rarely survives byte-identical.
 function collapse(s: string): string {
   return s.replace(/\s+/g, " ").trim().toLowerCase();
@@ -158,12 +160,21 @@ export function segmentRoles(structured: StructuredResume, raw: RawRole[]): Role
     // enough to be distinctive — a bare company name must not satisfy a full
     // header, which previously let one role claim another's line.
     if (needle.length < 8) return matches;
+
+    // A role header never starts with a bullet marker, so excluding those stops
+    // a mid-role bullet from being claimed as a header.
+    const candidates: number[] = [];
     for (let i = 0; i < collapsedLines.length; i++) {
-      if (collapsedLines[i].includes(needle)) {
-        matches.push(i);
-      }
+      if (BULLET_LINE.test(lines[i].trim())) continue;
+      if (collapsedLines[i].includes(needle)) candidates.push(i);
     }
-    return matches;
+
+    // Prefer lines the needle STARTS: "software engineer, acme" begins its own
+    // header but sits mid-line inside "senior software engineer, acme", so
+    // taking the first containment match gave a promotion-pattern resume the
+    // wrong role — and with it the wrong dates, recency, and strength.
+    const prefixed = candidates.filter((i) => collapsedLines[i].startsWith(needle));
+    return prefixed.length > 0 ? prefixed : candidates;
   };
 
   // Process roles in order, claiming indices uniquely. When a role's needle
