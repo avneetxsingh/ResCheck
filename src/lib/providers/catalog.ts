@@ -38,7 +38,10 @@ export const GROQ_INFO: ProviderInfo = {
     jdChars: 4_000,
     // Headroom over the ~1300 tokens 12 errors + 10 roles actually need. Groq
     // bills real usage, not the ceiling, so a margin here costs no TPM.
-    maxOutputTokens: { jdSkills: 800, lineAudit: 2_400, summary: 700 },
+    // Headroom for reasoning tokens, which share this budget on gpt-oss even
+    // at low effort. Groq bills real usage, not the ceiling, so the margin is
+    // free — and running out mid-JSON costs the whole call.
+    maxOutputTokens: { jdSkills: 1_500, lineAudit: 4_000, summary: 1_500 },
     // 12 errors (~840 tok) + 10 roles (~300 tok) fits 1800 with room to spare.
     // 25 needed ~2050 and truncated every time, which Groq rejects outright.
     maxErrors: 12,

@@ -8,21 +8,32 @@ export const groqProvider: Provider = {
 
   async complete(apiKey: string, req: CompletionRequest): Promise<CompletionResult> {
     const groq = new Groq({ apiKey });
-    const completion = await groq.chat.completions.create(
-      {
-        model: req.model,
-        messages: [
-          { role: "system", content: req.systemPrompt },
-          { role: "user", content: req.userPrompt },
-        ],
-        response_format: { type: "json_object" },
-        temperature: req.temperature,
-        max_tokens: req.maxTokens,
-      },
+    // gpt-oss are reasoning models and reasoning tokens are drawn from
+    // max_tokens. Left at Groq's default effort of "medium", reasoning consumes
+    // the budget before the JSON is finished, and Groq rejects its own
+    // truncated output as json_validate_failed — a 400, not a token error.
+    // "hidden" keeps reasoning out of the content field; "raw" is rejected
+    // outright when response_format is json_object.
+    const params = {
+      model: req.model,
+      messages: [
+        { role: "system" as const, content: req.systemPrompt },
+        { role: "user" as const, content: req.userPrompt },
+      ],
+      response_format: { type: "json_object" as const },
+      temperature: req.temperature,
+      max_tokens: req.maxTokens,
+      reasoning_effort: "low",
+      reasoning_format: "hidden",
+    };
+    // The param cast widens the return to the streaming union; stream is never
+    // set, so narrow back to the shape actually returned.
+    const completion = (await groq.chat.completions.create(
+      params as unknown as Parameters<typeof groq.chat.completions.create>[0],
       { signal: req.signal }
-    );
+    )) as { choices?: { message?: { content?: string | null } }[]; model?: string };
     return {
-      rawText: completion.choices[0]?.message?.content ?? "",
+      rawText: completion.choices?.[0]?.message?.content ?? "",
       actualModel: completion.model ?? req.model,
     };
   },
@@ -30,6 +41,12 @@ export const groqProvider: Provider = {
   classifyError(err: unknown): ClassifiedError {
     const status = errStatus(err);
     const detail = errMessage(err);
+    // json_validate_failed means the model produced unusable JSON, almost
+    // always because reasoning exhausted max_tokens. Retrying at a different
+    // temperature can genuinely help, so it stays a plain failure.
+    if (/json_validate_failed|failed to (validate|generate) json/i.test(detail)) {
+      return { kind: "failed" };
+    }
 
     if (status === 401) return { kind: "auth" };
     // A retired or unknown model fails identically on every retry. Match only
