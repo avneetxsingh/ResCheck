@@ -14,23 +14,55 @@ interface SkillsGapPanelProps {
 
 type FilterType = "all" | "present" | "missing";
 
-// Old history entries have no strength field, so fall back to present_in_resume
-// and keep rendering exactly as they did before evidence scoring existed.
-function strengthLabel(skill: Skill): { text: string; tone: string } {
-  switch (skill.strength) {
-    case "strong":
-      return { text: "Strong", tone: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30" };
-    case "moderate":
-      return { text: "Moderate", tone: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30" };
-    case "weak":
-      return { text: "Listed only", tone: "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/30" };
-    case "missing":
-      return { text: "Missing", tone: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30" };
-    default:
-      return skill.present_in_resume
-        ? { text: "Found", tone: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30" }
-        : { text: "Missing", tone: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30" };
-  }
+// Only the three evidence tiers earn a pill. "missing" and old history entries
+// are already conveyed by SkillBadge's own colour and icon, so rendering them
+// here put two identical badges side by side.
+const STRENGTH_PILL: Record<"strong" | "moderate" | "weak", { text: string; tone: string }> = {
+  strong: { text: "Strong", tone: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30" },
+  moderate: { text: "Moderate", tone: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30" },
+  weak: { text: "Listed only", tone: "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/30" },
+};
+
+function strengthPill(skill: Skill): { text: string; tone: string } | null {
+  const s = skill.strength;
+  return s === "strong" || s === "moderate" || s === "weak" ? STRENGTH_PILL[s] : null;
+}
+
+// One row per skill, shared by the must-have and nice-to-have lists.
+function SkillRow({ skill }: { skill: Skill }) {
+  const pill = strengthPill(skill);
+  const months = skill.last_used_months_ago;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1.5">
+        <SkillBadge skill={skill} />
+        {pill && (
+          <span
+            className={cn(
+              "inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-medium",
+              pill.tone
+            )}
+          >
+            {pill.text}
+          </span>
+        )}
+      </div>
+      {skill.evidence && skill.evidence.roles.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {skill.evidence.roles.map((r) => r.title).join(", ")}
+          {typeof months === "number" &&
+            (months === 0
+              ? " \u00b7 currently using"
+              : ` \u00b7 last used ${months} ${months === 1 ? "month" : "months"} ago`)}
+        </p>
+      )}
+      {skill.strength === "weak" && (
+        <p className="text-xs text-muted-foreground">
+          Listed in your skills section, but no dated role backs it up.
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
@@ -105,38 +137,9 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
           </h3>
           {filteredMustHave.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {filteredMustHave.map((skill) => {
-                const { text, tone } = strengthLabel(skill);
-                return (
-                  <div key={skill.name} className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5">
-                      <SkillBadge skill={skill} />
-                      <span
-                        className={cn(
-                          "inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-medium",
-                          tone
-                        )}
-                      >
-                        {text}
-                      </span>
-                    </div>
-                    {skill.evidence && skill.evidence.roles.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        {skill.evidence.roles.map((r) => r.title).join(", ")}
-                        {typeof skill.last_used_months_ago === "number" &&
-                          (skill.last_used_months_ago === 0
-                            ? " · currently using"
-                            : ` · last used ${skill.last_used_months_ago} months ago`)}
-                      </p>
-                    )}
-                    {skill.strength === "weak" && (
-                      <p className="text-xs text-muted-foreground">
-                        Listed in your skills section, but no dated role backs it up.
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
+              {filteredMustHave.map((skill) => (
+                <SkillRow key={skill.name} skill={skill} />
+              ))}
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">No skills match this filter.</p>
@@ -154,38 +157,9 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
           </h3>
           {filteredNiceToHave.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {filteredNiceToHave.map((skill) => {
-                const { text, tone } = strengthLabel(skill);
-                return (
-                  <div key={skill.name} className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5">
-                      <SkillBadge skill={skill} />
-                      <span
-                        className={cn(
-                          "inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-medium",
-                          tone
-                        )}
-                      >
-                        {text}
-                      </span>
-                    </div>
-                    {skill.evidence && skill.evidence.roles.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        {skill.evidence.roles.map((r) => r.title).join(", ")}
-                        {typeof skill.last_used_months_ago === "number" &&
-                          (skill.last_used_months_ago === 0
-                            ? " · currently using"
-                            : ` · last used ${skill.last_used_months_ago} months ago`)}
-                      </p>
-                    )}
-                    {skill.strength === "weak" && (
-                      <p className="text-xs text-muted-foreground">
-                        Listed in your skills section, but no dated role backs it up.
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
+              {filteredNiceToHave.map((skill) => (
+                <SkillRow key={skill.name} skill={skill} />
+              ))}
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">No skills match this filter.</p>
