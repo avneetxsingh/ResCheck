@@ -28,10 +28,20 @@ export function normalizeSkill(s: string): string {
 // the resume-side forms are how people actually write them. Levels are ordered
 // so Gate 2 can decide "equal or higher" — they are the alias table and the
 // degree ladder at once, so the two can never drift apart.
-export const DEGREE_GROUPS: { level: number; aliases: string[] }[] = [
-  { level: 1, aliases: ["bachelor s degree", "bachelors degree", "bachelor s", "bachelor", "b.s.", "b.a.", "bsc", "undergraduate degree"] },
-  { level: 2, aliases: ["master s degree", "masters degree", "master s", "masters", "m.s.", "msc"] },
-  { level: 3, aliases: ["phd", "ph.d.", "ph.d", "doctorate", "doctoral degree"] },
+export const DEGREE_GROUPS: { level: number; aliases: string[]; ambiguous: string[] }[] = [
+  {
+    level: 1,
+    aliases: ["bachelor s degree", "bachelors degree", "bachelor s", "bachelor", "b.s.", "b.a.", "bsc", "undergraduate degree"],
+    // Someone can write these without holding the degree ("Bachelor's Program
+    // coordinator"), so Gate 2 treats a match on them as unproven, not absent.
+    ambiguous: ["bachelor s", "bachelor"],
+  },
+  {
+    level: 2,
+    aliases: ["master s degree", "masters degree", "master s", "masters", "m.s.", "msc"],
+    ambiguous: ["master s", "masters"],
+  },
+  { level: 3, aliases: ["phd", "ph.d.", "ph.d", "doctorate", "doctoral degree"], ambiguous: [] },
 ];
 
 const ALIAS_GROUPS: string[][] = [

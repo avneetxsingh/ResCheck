@@ -139,6 +139,35 @@ describe("evaluateKnockoutGate — degree", () => {
     const gate = evaluateKnockoutGate([req("degree", "an engineering qualification")], CTX);
     expect(gate.checks[0].verdict).toBe("unverifiable");
   });
+
+  it("a bare mention of the degree is unverifiable, not a pass", () => {
+    const ctx = {
+      ...CTX,
+      structured: withEducation([
+        "B.A. Fine Arts, State University",
+        "Coordinated the Master's Program orientation",
+      ]),
+    };
+    const gate = evaluateKnockoutGate([req("degree", "Master's degree")], ctx);
+    expect(gate.checks[0].verdict).toBe("unverifiable");
+    expect(gate.verdict).toBe("unverifiable");
+  });
+
+  it("a credential held outranks a bare mention of a higher one", () => {
+    const ctx = {
+      ...CTX,
+      structured: withEducation([
+        "B.A. Fine Arts, State University",
+        "Coordinated the Master's Program orientation",
+      ]),
+    };
+    expect(evaluateKnockoutGate([req("degree", "Bachelor's degree")], ctx).checks[0].verdict).toBe("pass");
+  });
+
+  it("a credential form still passes on its own", () => {
+    const ctx = { ...CTX, structured: withEducation(["M.S. Computer Science, State University"]) };
+    expect(evaluateKnockoutGate([req("degree", "Master's degree")], ctx).checks[0].verdict).toBe("pass");
+  });
 });
 
 describe("evaluateKnockoutGate — years of experience", () => {

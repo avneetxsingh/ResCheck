@@ -77,14 +77,36 @@ export function monthsLabel(months: number): string {
   return `${years}y ${rest}m`;
 }
 
-// Highest degree level named anywhere in the text, or 0 when none is.
-function degreeLevelIn(text: string): number {
+// A literal, word-bounded check with no alias fan-out — deliberately not
+// skillAppearsIn. skillAppearsIn's aliasesFor step treats every alias in a
+// DEGREE_GROUPS entry as interchangeable with its siblings (that's what makes
+// "k8s" find "Kubernetes"), so calling it on a credential form like "m.s."
+// would also match on the bare "master s" text alone, via that form's own
+// ambiguous sibling in the same group — reopening the exact hole this
+// function exists to close. Credential detection needs the literal string.
+function containsLiteral(haystackNorm: string, term: string): boolean {
+  const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`).test(haystackNorm);
+}
+
+// The highest degree level claimed as a credential ("M.S.", "Master's degree")
+// and the highest named at all, including bare mentions ("Master's"), which
+// someone can write without holding one. Gate 2 needs both: a bare mention is
+// not proof of the degree, and not proof of its absence either.
+function degreeLevelsIn(text: string): { credential: number; any: number } {
   const norm = normalizeSkill(text);
-  let level = 0;
+  let credential = 0;
+  let any = 0;
   for (const group of DEGREE_GROUPS) {
-    if (group.aliases.some((a) => skillAppearsIn(norm, a))) level = Math.max(level, group.level);
+    const credentialForms = group.aliases.filter((a) => !group.ambiguous.includes(a));
+    if (credentialForms.some((a) => containsLiteral(norm, a))) {
+      credential = Math.max(credential, group.level);
+      any = Math.max(any, group.level);
+    } else if (group.ambiguous.some((a) => skillAppearsIn(norm, a))) {
+      any = Math.max(any, group.level);
+    }
   }
-  return level;
+  return { credential, any };
 }
 
 function requiredYears(value: string): number | null {
@@ -111,7 +133,7 @@ function checkRequirement(r: JdRequirement, ctx: KnockoutContext): KnockoutCheck
     if (education.length === 0) {
       return { ...base, verdict: "unverifiable", detail: "No education section could be parsed, so this couldn't be checked." };
     }
-    const needed = degreeLevelIn(r.value);
+    const needed = degreeLevelsIn(r.value).any;
     if (needed === 0) {
       return {
         ...base,
@@ -119,10 +141,18 @@ function checkRequirement(r: JdRequirement, ctx: KnockoutContext): KnockoutCheck
         detail: `"${r.value}" doesn't name a degree level, so check it against your education section yourself.`,
       };
     }
-    const held = degreeLevelIn(education.flatMap((s) => s.lines).join("\n"));
-    return held >= needed
-      ? { ...base, verdict: "pass", detail: "Your education section shows an equal or higher degree." }
-      : { ...base, verdict: "fail", detail: `The posting asks for ${r.value}; your education section doesn't show one.` };
+    const held = degreeLevelsIn(education.flatMap((s) => s.lines).join("\n"));
+    if (held.credential >= needed) {
+      return { ...base, verdict: "pass", detail: "Your education section shows an equal or higher degree." };
+    }
+    if (held.any >= needed) {
+      return {
+        ...base,
+        verdict: "unverifiable",
+        detail: `Your education section mentions ${r.value} but not as a credential you hold — check this one yourself.`,
+      };
+    }
+    return { ...base, verdict: "fail", detail: `The posting asks for ${r.value}; your education section doesn't show one.` };
   }
 
   if (r.type === "years_experience") {
