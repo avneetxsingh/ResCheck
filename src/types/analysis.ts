@@ -61,7 +61,9 @@ export interface SkillsGapAnalysis {
   must_have: Skill[];
   nice_to_have: Skill[];
   bonus_skills: string[];
-  overall_match_percentage: number;
+  // Deleted 2026-08-19 — Gate 3's "surfaces for N of M searches" replaces it.
+  // Optional so stored entries keep the value they were written with.
+  overall_match_percentage?: number;
 }
 
 export interface ScorecardMetric {
@@ -72,12 +74,15 @@ export interface ScorecardMetric {
 }
 
 export interface Scorecard {
-  overall_ats_score: ScorecardMetric;
-  skills_match_score: ScorecardMetric;
   grammar_score: ScorecardMetric;
   formatting_score: ScorecardMetric;
   impact_score: ScorecardMetric;
-  keyword_density_score: ScorecardMetric;
+  // Deleted 2026-08-19 — no real system computes an overall ATS score, and the
+  // funnel answers the other two honestly. Kept optional because every stored
+  // history entry still carries them and must render unchanged.
+  overall_ats_score?: ScorecardMetric;
+  skills_match_score?: ScorecardMetric;
+  keyword_density_score?: ScorecardMetric;
 }
 
 export interface ExecutiveSummary {
@@ -193,6 +198,7 @@ export interface AnalysisResult {
   errors: LineError[];
   formatting_audit?: FormattingAudit; // optional — absent in pre-existing history entries
   ats_extraction?: AtsExtraction; // optional — absent in pre-v2 history entries
+  funnel?: FunnelResult; // optional — absent in history entries written before the funnel
   warnings?: string[]; // degraded-stage warnings — absent in pre-v2 history entries
   summary: ExecutiveSummary;
   metadata: {
@@ -213,6 +219,7 @@ export interface RawAnalysisResult {
   errors: Omit<LineError, "id">[];
   formatting_audit: FormattingAudit;
   ats_extraction?: AtsExtraction;
+  funnel?: FunnelResult; // optional — absent in history entries written before the funnel
   warnings?: string[];
   summary: ExecutiveSummary;
   metadata: Omit<AnalysisResult["metadata"], "analyzed_at">;

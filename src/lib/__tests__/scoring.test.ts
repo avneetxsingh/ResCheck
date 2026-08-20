@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeScores, buildFallbackSummary } from "@/lib/scoring";
-import type { FormattingAudit, Skill, LineError } from "@/types/analysis";
+import type { FormattingAudit, Skill, LineError, FunnelResult } from "@/types/analysis";
 
 const CLEAN_AUDIT: FormattingAudit = {
   whitespace_issues: [], bold_inconsistencies: [], bullet_inconsistencies: [],
@@ -17,135 +17,110 @@ const err = (error_type: LineError["error_type"]): Omit<LineError, "id"> => ({
   reason: "r", section: "experience", severity: "moderate",
 });
 
+const PASSING_FUNNEL: FunnelResult = {
+  parse: { verdict: "clean", reasons: [] },
+  knockout: { verdict: "pass", stated: true, checks: [] },
+  retrieve: { queries: [], surfaced: 3, total: 3, misses: [] },
+  signals: [],
+};
+
 describe("computeScores", () => {
-  it("perfect input scores 95/95/90 on formatting/grammar/impact and verdict strong", () => {
-    const out = computeScores({
-      errors: [], formattingAudit: CLEAN_AUDIT,
-      mustHave: [skill("React", "exact")], niceToHave: [],
-    });
+  it("keeps only the three writing metrics", () => {
+    const out = computeScores({ errors: [], formattingAudit: CLEAN_AUDIT });
     expect(out.scorecard.formatting_score.score).toBe(95);
     expect(out.scorecard.grammar_score.score).toBe(95);
     expect(out.scorecard.impact_score.score).toBe(90);
-    expect(out.scorecard.skills_match_score.score).toBe(100);
-    expect(out.scorecard.keyword_density_score.score).toBe(100);
-    expect(out.verdict).toBe("strong");
-    expect(out.overallMatchPercentage).toBe(100);
-  });
-
-  it("weights must-have 80/20 over nice-to-have with partial = 0.5", () => {
-    const out = computeScores({
-      errors: [], formattingAudit: CLEAN_AUDIT,
-      mustHave: [skill("A", "exact"), skill("B", "missing")],
-      niceToHave: [skill("C", "partial")],
-    });
-    // must ratio 0.5, nice ratio 0.5 → (0.5*0.8 + 0.5*0.2)*100 = 50
-    expect(out.scorecard.skills_match_score.score).toBe(50);
-  });
-
-  it("keyword density is present/total; empty skills default to 50", () => {
-    const out = computeScores({ errors: [], formattingAudit: CLEAN_AUDIT, mustHave: [], niceToHave: [] });
-    expect(out.scorecard.keyword_density_score.score).toBe(50);
+    expect(out.scorecard.overall_ats_score).toBeUndefined();
+    expect(out.scorecard.skills_match_score).toBeUndefined();
+    expect(out.scorecard.keyword_density_score).toBeUndefined();
   });
 
   it("grammar bracket: 4 grammar errors → 67", () => {
     const out = computeScores({
       errors: [err("grammar"), err("spelling"), err("punctuation"), err("tense_inconsistency")],
-      formattingAudit: CLEAN_AUDIT, mustHave: [], niceToHave: [],
+      formattingAudit: CLEAN_AUDIT,
     });
     expect(out.scorecard.grammar_score.score).toBe(67);
   });
 
-  it("overall is the ATS-screen weighted formula, verdict from brackets", () => {
-    const out = computeScores({ errors: [], formattingAudit: CLEAN_AUDIT, mustHave: [], niceToHave: [] });
-    // skills 100*.45 + kw 50*.25 + formatting 95*.15 + impact 90*.10 + grammar 95*.05 = 85.5 → 86
-    expect(out.scorecard.overall_ats_score.score).toBe(86);
-    expect(out.verdict).toBe("strong");
+  it("impact bracket: 3 impact errors → 60", () => {
+    const out = computeScores({
+      errors: [err("weak_verb"), err("passive_voice"), err("vague_language")],
+      formattingAudit: CLEAN_AUDIT,
+    });
+    expect(out.scorecard.impact_score.score).toBe(60);
   });
 
-  it("any missing must-have caps overall at 79 (cannot be strong)", () => {
-    const out = computeScores({
-      errors: [], formattingAudit: CLEAN_AUDIT,
-      mustHave: [...Array.from({ length: 9 }, (_, i) => skill(`S${i}`, "exact")), skill("Rust", "missing")],
-      niceToHave: [],
-    });
-    // raw would be 92 — knocked down to the cap
-    expect(out.scorecard.overall_ats_score.score).toBe(79);
-    expect(out.verdict).toBe("moderate");
-    expect(out.scorecard.overall_ats_score.rationale).toContain("Capped");
-  });
-
-  it("more than half the must-haves missing caps overall at 49 (critical)", () => {
-    const out = computeScores({
-      errors: [], formattingAudit: CLEAN_AUDIT,
-      mustHave: [skill("A", "exact"), skill("B", "exact"), skill("C", "missing"), skill("D", "missing"), skill("E", "missing")],
-      niceToHave: [],
-    });
-    expect(out.scorecard.overall_ats_score.score).toBe(49);
-    expect(out.verdict).toBe("critical");
-  });
-
-  it("parse warnings penalize the formatting score by 15 each", () => {
-    const out = computeScores({
-      errors: [], formattingAudit: CLEAN_AUDIT, mustHave: [], niceToHave: [],
-      parseWarningCount: 2,
-    });
+  it("parse warnings subtract 15 each from formatting, with a floor of 15", () => {
+    const out = computeScores({ errors: [], formattingAudit: CLEAN_AUDIT, parseWarningCount: 2 });
     expect(out.scorecard.formatting_score.score).toBe(65);
-    expect(out.scorecard.formatting_score.rationale).toContain("parse warning");
-  });
-
-  it("every metric carries a non-empty rationale and improvement_tip", () => {
-    const out = computeScores({
-      errors: [err("weak_verb")], formattingAudit: CLEAN_AUDIT,
-      mustHave: [skill("A", "missing")], niceToHave: [],
-    });
-    for (const m of Object.values(out.scorecard)) {
-      expect(m.rationale.length).toBeGreaterThan(0);
-      expect(m.improvement_tip.length).toBeGreaterThan(0);
-    }
-  });
-});
-
-const CLEAN_AUDIT_2 = {
-  whitespace_issues: [], bold_inconsistencies: [], bullet_inconsistencies: [],
-  date_format_issues: [], capitalization_issues: [], other_inconsistencies: [], is_clean: true,
-};
-
-const skillBase = { name: "X", present_in_resume: true, category: "technical" as const };
-
-describe("strength-aware scoring", () => {
-  it("scores a strong skill above a weak one", () => {
-    const strong = computeScores({
-      errors: [], formattingAudit: CLEAN_AUDIT_2, niceToHave: [],
-      mustHave: [{ ...skillBase, match_strength: "exact" as const, strength: "strong" as const }],
-    });
-    const weak = computeScores({
-      errors: [], formattingAudit: CLEAN_AUDIT_2, niceToHave: [],
-      mustHave: [{ ...skillBase, match_strength: "exact" as const, strength: "weak" as const }],
-    });
-    expect(strong.scorecard.skills_match_score.score).toBeGreaterThan(
-      weak.scorecard.skills_match_score.score
-    );
-  });
-
-  it("falls back to match_strength for a history entry with no strength field", () => {
-    const legacy = computeScores({
-      errors: [], formattingAudit: CLEAN_AUDIT_2, niceToHave: [],
-      mustHave: [{ ...skillBase, match_strength: "exact" as const }],
-    });
-    expect(legacy.scorecard.skills_match_score.score).toBe(100);
+    const floored = computeScores({ errors: [], formattingAudit: CLEAN_AUDIT, parseWarningCount: 20 });
+    expect(floored.scorecard.formatting_score.score).toBe(15);
   });
 });
 
 describe("buildFallbackSummary", () => {
-  it("produces exactly 3 strengths and 3 improvements and a headline", () => {
-    const out = computeScores({
-      errors: [], formattingAudit: CLEAN_AUDIT,
-      mustHave: [skill("React", "missing")], niceToHave: [],
+  it("narrates the funnel, not a score", () => {
+    const out = computeScores({ errors: [], formattingAudit: CLEAN_AUDIT });
+    const summary = buildFallbackSummary({
+      scorecard: out.scorecard,
+      verdict: "critical",
+      funnel: {
+        ...PASSING_FUNNEL,
+        knockout: {
+          verdict: "fail", stated: true,
+          checks: [{
+            type: "years_experience", value: "5", required: true,
+            verdict: "fail", detail: "3 years of dated experience against 5 years required.",
+          }],
+        },
+      },
+      mustHave: [skill("React", "exact")],
+      errors: [],
+      bonusSkills: [],
     });
-    const s = buildFallbackSummary(out, [skill("React", "missing")], [], ["Docker"]);
-    expect(s.top_strengths).toHaveLength(3);
-    expect(s.top_improvements).toHaveLength(3);
-    expect(s.headline.length).toBeGreaterThan(0);
-    expect(s.verdict).toBe(out.verdict);
+    expect(summary.verdict).toBe("critical");
+    expect(summary.top_improvements.join(" ")).toContain("5 years required");
+    expect(summary.top_strengths).toHaveLength(3);
+    expect(summary.top_improvements).toHaveLength(3);
+  });
+
+  it("names the missed searches when retrieval is the blocker", () => {
+    const out = computeScores({ errors: [], formattingAudit: CLEAN_AUDIT });
+    const summary = buildFallbackSummary({
+      scorecard: out.scorecard,
+      verdict: "needs_work",
+      funnel: {
+        ...PASSING_FUNNEL,
+        retrieve: { queries: [], surfaced: 1, total: 3, misses: ["Terraform", "React AND Terraform"] },
+      },
+      mustHave: [skill("Terraform", "missing")],
+      errors: [],
+      bonusSkills: [],
+    });
+    expect(summary.top_improvements.join(" ")).toContain("Terraform");
+  });
+
+  it("never claims work authorization or location was cleared", () => {
+    const out = computeScores({ errors: [], formattingAudit: CLEAN_AUDIT });
+    const summary = buildFallbackSummary({
+      scorecard: out.scorecard,
+      verdict: "moderate",
+      funnel: {
+        ...PASSING_FUNNEL,
+        knockout: {
+          verdict: "unverifiable", stated: true,
+          checks: [{
+            type: "work_authorization", value: "US work authorization", required: true,
+            verdict: "unverifiable", detail: "The form will ask this.",
+          }],
+        },
+      },
+      mustHave: [],
+      errors: [],
+      bonusSkills: [],
+    });
+    const all = [summary.headline, ...summary.top_strengths, ...summary.top_improvements].join(" ");
+    expect(all).not.toMatch(/work authorization[^.]*\b(pass|passed|clear|cleared|meet|met)\b/i);
   });
 });
