@@ -46,7 +46,9 @@ export const GROQ_INFO: ProviderInfo = {
     // Headroom for reasoning tokens, which share this budget on gpt-oss even
     // at low effort. Groq bills real usage, not the ceiling, so the margin is
     // free — and running out mid-JSON costs the whole call.
-    maxOutputTokens: { jdSkills: 1_500, lineAudit: 4_000, summary: 1_500 },
+    // jdSkills raised from 1,500 for the requirements array: exceeding the cap
+    // truncates the JSON and the whole AI-1 call is lost, not just the overflow.
+    maxOutputTokens: { jdSkills: 2_000, lineAudit: 4_000, summary: 1_500 },
     // 12 errors (~840 tok) + 10 roles (~300 tok) fits 1800 with room to spare.
     // 25 needed ~2050 and truncated every time, which Groq rejects outright.
     maxErrors: 12,

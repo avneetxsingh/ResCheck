@@ -10,9 +10,10 @@ import { extractResumeStructure, toAtsExtraction, buildSectionizedText, sectionN
 import { runFormattingAudit } from "@/lib/formatting-audit";
 import { buildSkills, extractBonusSkills, clipJd, sanitizeSkillName, isNegatedInJd } from "@/lib/keyword-match";
 import { computeScores, buildFallbackSummary, AUDIT_KEYS } from "@/lib/scoring";
-import { segmentRoles } from "@/lib/work-history";
+import { segmentRoles, computeWorkHistoryMetrics } from "@/lib/work-history";
+import { buildFunnel, deriveFunnelVerdict, normalizeRequirementType } from "@/lib/funnel";
 import type { ApiError } from "@/types/api";
-import type { RawAnalysisResult } from "@/types/analysis";
+import type { JdRequirement, RawAnalysisResult } from "@/types/analysis";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -55,14 +56,45 @@ const skillList = (max: number) =>
       a.map(sanitizeSkillName).filter((s): s is string => s !== null).slice(0, max)
     );
 
+// Per-item catch, exactly like SkillNameSchema: an array-level catch alone
+// throws away every valid sibling when one element is malformed. An
+// unrecognized type resolves to null and the item is dropped rather than
+// becoming a check the posting never stated.
+const RequirementItemSchema = z
+  .object({
+    type: z.string().catch(""),
+    value: z.union([z.string(), z.number()]).catch("").transform(String),
+    required: z.union([z.boolean(), z.string(), z.number()]).catch(true),
+  })
+  .catch({ type: "", value: "", required: true });
+
+const requirementList = z
+  .array(RequirementItemSchema)
+  .catch([])
+  .transform((items) =>
+    items
+      .map((r) => ({
+        type: normalizeRequirementType(r.type),
+        value: r.value.trim(),
+        // The model emits "true", "yes", and 1 as readily as a boolean.
+        required:
+          typeof r.required === "boolean"
+            ? r.required
+            : !/^(false|no|0|preferred|optional)$/i.test(String(r.required).trim()),
+      }))
+      .filter((r): r is JdRequirement => r.type !== null && r.value.length > 0)
+      .slice(0, 10)
+  );
+
 const JdSkillsSchema = z
   .object({
     job_title: z.string().catch(""),
     must_have: skillList(15),
     nice_to_have: skillList(10),
+    requirements: requirementList,
     jd_quality: z.enum(["rich", "moderate", "sparse"]).catch("moderate"),
   })
-  .catch({ job_title: "", must_have: [], nice_to_have: [], jd_quality: "moderate" });
+  .catch({ job_title: "", must_have: [], nice_to_have: [], requirements: [], jd_quality: "moderate" });
 type JdSkills = z.infer<typeof JdSkillsSchema>;
 
 const ERROR_TYPES = [
@@ -319,7 +351,7 @@ export async function POST(req: NextRequest) {
 
         const jd: JdSkills = jdOutcome.ok
           ? jdOutcome.data
-          : { job_title: "", must_have: [], nice_to_have: [], jd_quality: "sparse" };
+          : { job_title: "", must_have: [], nice_to_have: [], requirements: [], jd_quality: "sparse" };
         if (!jdOutcome.ok) warn("Couldn't extract skills from the job description this run — the Skills tab will be empty.");
 
         const errors = errorsOutcome.ok ? errorsOutcome.data.errors : [];
@@ -333,6 +365,13 @@ export async function POST(req: NextRequest) {
         if (errorsOutcome.ok && anchoredRoles.length === 0) {
           warn("Couldn't locate your job entries in the resume text — skills are matched without recency this run.");
         }
+        // Work-history metrics feed both Gate 2's years check and the
+        // competitiveness signals. Only anchored, fully dated roles count —
+        // an unanchored role has no text and an undated one has no span.
+        const datedRanges = anchoredRoles
+          .map((r) => r.range)
+          .filter((r) => r.start !== null && r.end !== null);
+        const workMetrics = computeWorkHistoryMetrics(datedRanges);
         const skillOpts = { structured, roles: anchoredRoles };
         // "No Kubernetes experience required" must not register as a requirement.
         // This runs here rather than in the zod transform because the transform
@@ -357,9 +396,17 @@ export async function POST(req: NextRequest) {
           ...jd.nice_to_have.filter(notNegated),
         ]);
         const scoring = computeScores({
-          errors, formattingAudit: audit, mustHave, niceToHave,
-          parseWarningCount: structured.warnings.length,
+          errors, formattingAudit: audit, parseWarningCount: structured.warnings.length,
         });
+        const funnel = buildFunnel({
+          structured, audit, resumeText,
+          requirements: jd.requirements,
+          mustHave, metrics: workMetrics,
+          hasDatedRoles: datedRanges.length > 0,
+        });
+        // The verdict is derived from the gates now — it cannot outlive the
+        // overall score it used to be bracketed from.
+        const verdict = deriveFunnelVerdict(funnel);
 
         // Stage 5 — AI-3 summary from a compact factual digest
         emit("stage", { stage: "summary", progress: 85 });
@@ -369,14 +416,19 @@ export async function POST(req: NextRequest) {
         const digest = [
           `Job title: ${jd.job_title || "unknown"}`,
           `JD quality: ${jd.jd_quality}`,
-          `Overall ATS score: ${sc.overall_ats_score.score}/100 (verdict: ${scoring.verdict})`,
-          `Must-have skills matched: ${mustHave.filter((s) => s.match_strength !== "missing").length}/${mustHave.length}`,
+          `Gate 1 — Parse: ${funnel.parse.verdict}${funnel.parse.reasons.length > 0 ? ` (${funnel.parse.reasons.slice(0, 3).join("; ")})` : ""}`,
+          `Gate 2 — Knockout: ${funnel.knockout.stated ? funnel.knockout.verdict : "the posting states no hard requirements, so nothing was checked"}`,
+          `Knockout checks: ${funnel.knockout.checks.slice(0, 6).map((c) => `${c.type} = ${c.verdict}${c.required ? "" : " (preferred, not a knockout)"} — ${c.detail}`).join(" | ") || "none"}`,
+          `Gate 3 — Retrieve: surfaces for ${funnel.retrieve.surfaced} of ${funnel.retrieve.total} recruiter searches`,
+          `Searches that miss: ${funnel.retrieve.misses.slice(0, 6).join(", ") || "none"}`,
+          `Competitiveness signals: ${funnel.signals.map((s) => `${s.label} = ${s.value}`).join("; ") || "none"}`,
           `Missing must-have skills: ${missingMust.join(", ") || "none"}`,
           `Bonus skills on resume: ${bonusSkills.slice(0, 6).join(", ") || "none"}`,
           `Writing errors: ${errors.length} (${errors.filter((e) => e.severity === "critical").length} critical)`,
           `Top errors: ${errors.slice(0, 5).map((e) => `${e.error_type}: ${e.reason}`).join("; ") || "none"}`,
           `Formatting inconsistencies: ${auditCount}`,
-          `Scores — skills ${sc.skills_match_score.score}, keywords ${sc.keyword_density_score.score}, impact ${sc.impact_score.score}, grammar ${sc.grammar_score.score}, formatting ${sc.formatting_score.score}`,
+          `Writing scores — impact ${sc.impact_score.score}, grammar ${sc.grammar_score.score}, formatting ${sc.formatting_score.score}`,
+          `Overall verdict: ${verdict}`,
         ].join("\n");
 
         const summaryOutcome = await callStage({
@@ -385,11 +437,13 @@ export async function POST(req: NextRequest) {
           schema: SummarySchema, maxTokens: provider.budgets.maxOutputTokens.summary, onWarning: warn,
         });
 
-        const fallback = buildFallbackSummary(scoring, mustHave, errors, bonusSkills);
+        const fallback = buildFallbackSummary({
+          scorecard: scoring.scorecard, verdict, funnel, mustHave, errors, bonusSkills,
+        });
         const summary =
           summaryOutcome.ok && summaryOutcome.data.headline
             ? {
-                verdict: scoring.verdict,
+                verdict,
                 headline: summaryOutcome.data.headline,
                 top_strengths:
                   summaryOutcome.data.top_strengths.length === 3
@@ -416,11 +470,11 @@ export async function POST(req: NextRequest) {
             must_have: mustHave,
             nice_to_have: niceToHave,
             bonus_skills: bonusSkills,
-            overall_match_percentage: scoring.overallMatchPercentage,
           },
           errors,
           formatting_audit: audit,
           ats_extraction: atsExtraction,
+          funnel,
           warnings,
           summary,
           metadata: {
