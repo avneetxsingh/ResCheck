@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { SkillBadge } from "./SkillBadge";
 import { ScoreRing } from "./ScoreRing";
-import { CheckCircle2, Star } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Skill, SkillsGapAnalysis } from "@/types/analysis";
+import type { ResumeSection, Skill, SkillsGapAnalysis } from "@/types/analysis";
 
 interface SkillsGapPanelProps {
   skillsGap: SkillsGapAnalysis;
@@ -20,7 +20,9 @@ type FilterType = "all" | "present" | "missing";
 const STRENGTH_PILL: Record<"strong" | "moderate" | "weak", { text: string; tone: string }> = {
   strong: { text: "Strong", tone: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30" },
   moderate: { text: "Moderate", tone: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30" },
-  weak: { text: "Listed only", tone: "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/30" },
+  // "weak" means claimed in a skills list with no dated role behind it —
+  // "Listed" says that plainly instead of implying a judgement.
+  weak: { text: "Listed", tone: "bg-zinc-500/10 text-zinc-700 dark:text-zinc-400 border-zinc-500/30" },
 };
 
 function strengthPill(skill: Skill): { text: string; tone: string } | null {
@@ -28,13 +30,73 @@ function strengthPill(skill: Skill): { text: string; tone: string } | null {
   return s === "strong" || s === "moderate" || s === "weak" ? STRENGTH_PILL[s] : null;
 }
 
-// One row per skill, shared by the must-have and nice-to-have lists.
+// months under 24 renders in months, at/above renders in whole years —
+// mind the singular/plural agreement on both.
+function formatRecency(months: number | null | undefined): string | null {
+  if (typeof months !== "number") return null;
+  if (months <= 0) return "currently using";
+  if (months < 24) return `used ${months} ${months === 1 ? "month" : "months"} ago`;
+  const years = Math.round(months / 12);
+  return `used ${years} ${years === 1 ? "year" : "years"} ago`;
+}
+
+// null means the role's dates did not parse — distinct from a role that
+// genuinely lasted zero months, so render nothing rather than "0 mo".
+function formatRoleDuration(months: number | null): string | null {
+  return months === null ? null : `${months} mo`;
+}
+
+function formatEndedAt(endedAt: string | null): string {
+  return endedAt ? `to ${endedAt}` : "to present";
+}
+
+function formatSectionList(sections: ResumeSection[]): string {
+  if (sections.length <= 1) return `your ${sections[0] ?? "resume"} section`;
+  const last = sections[sections.length - 1];
+  const rest = sections.slice(0, -1).join(", ");
+  return `your ${rest} and ${last} sections`;
+}
+
+function hasExpandableEvidence(skill: Skill): boolean {
+  const evidence = skill.evidence;
+  if (!evidence) return false;
+  return evidence.roles.length > 0 || evidence.sections.length > 0;
+}
+
+// One row per skill, shared by the must-have and nice-to-have lists. Legacy
+// history entries carry neither `strength` nor `evidence`, so every branch
+// below degrades to plain SkillBadge-only rendering for them — no crash, no
+// empty disclosure triangle.
 function SkillRow({ skill }: { skill: Skill }) {
+  const [expanded, setExpanded] = useState(false);
+  const evidenceId = useId();
   const pill = strengthPill(skill);
-  const months = skill.last_used_months_ago;
+  const recency = formatRecency(skill.last_used_months_ago);
+  // Weak skills have no dated role, so there's never a recency to show —
+  // say so instead of leaving the row silently blank.
+  const summary = recency ?? (skill.strength === "weak" ? "no dated role" : null);
+  const expandable = hasExpandableEvidence(skill);
+
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5">
+      <div
+        className={cn("flex items-center gap-1.5 flex-wrap", expandable && "cursor-pointer")}
+        role={expandable ? "button" : undefined}
+        tabIndex={expandable ? 0 : undefined}
+        aria-expanded={expandable ? expanded : undefined}
+        aria-controls={expandable ? evidenceId : undefined}
+        onClick={expandable ? () => setExpanded((e) => !e) : undefined}
+        onKeyDown={
+          expandable
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setExpanded((v) => !v);
+                }
+              }
+            : undefined
+        }
+      >
         <SkillBadge skill={skill} />
         {pill && (
           <span
@@ -46,20 +108,36 @@ function SkillRow({ skill }: { skill: Skill }) {
             {pill.text}
           </span>
         )}
+        {summary && <span className="text-xs text-muted-foreground">{summary}</span>}
+        {expandable &&
+          (expanded ? (
+            <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" aria-hidden />
+          ) : (
+            <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" aria-hidden />
+          ))}
       </div>
-      {skill.evidence && skill.evidence.roles.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {skill.evidence.roles.map((r) => r.title).join(", ")}
-          {typeof months === "number" &&
-            (months === 0
-              ? " \u00b7 currently using"
-              : ` \u00b7 last used ${months} ${months === 1 ? "month" : "months"} ago`)}
-        </p>
-      )}
-      {skill.strength === "weak" && skill.evidence && (
-        <p className="text-xs text-muted-foreground">
-          Listed in your skills section, but no dated role backs it up.
-        </p>
+      {expandable && expanded && skill.evidence && (
+        <div id={evidenceId} className="pl-4 space-y-0.5">
+          {skill.evidence.roles.length > 0 ? (
+            skill.evidence.roles.map((r, i) => {
+              const duration = formatRoleDuration(r.months);
+              const segments = [r.title, duration, formatEndedAt(r.ended_at)].filter(
+                (s): s is string => s !== null
+              );
+              return (
+                <p key={i} className="text-xs text-muted-foreground flex items-start gap-1">
+                  <span aria-hidden className="shrink-0">└</span>
+                  <span>{segments.join(" · ")}</span>
+                </p>
+              );
+            })
+          ) : (
+            <p className="text-xs text-muted-foreground flex items-start gap-1">
+              <span aria-hidden className="shrink-0">└</span>
+              <span>appears only in {formatSectionList(skill.evidence.sections)}</span>
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
