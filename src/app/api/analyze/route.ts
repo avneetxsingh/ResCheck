@@ -76,11 +76,16 @@ const requirementList = z
       .map((r) => ({
         type: normalizeRequirementType(r.type),
         value: r.value.trim(),
-        // The model emits "true", "yes", and 1 as readily as a boolean.
+        // The prompt tells the model to word an optional item as
+        // preferred/bonus/a plus/nice to have, so every one of those must
+        // coerce to false. A missed marker turns a preferred item into a
+        // knockout, and a failed knockout forces a critical verdict.
         required:
           typeof r.required === "boolean"
             ? r.required
-            : !/^(false|no|0|preferred|optional)$/i.test(String(r.required).trim()),
+            : !/^(false|no|0|preferred|optional|bonus|(a\s+)?plus|nice[\s_-]?to[\s_-]?have)$/i.test(
+                String(r.required).trim()
+              ),
       }))
       .filter((r): r is JdRequirement => r.type !== null && r.value.length > 0)
       .slice(0, 10)
