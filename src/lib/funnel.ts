@@ -3,7 +3,7 @@
 // against the same posting always agree — no model judgment is involved.
 import type {
   FormattingAudit, GateVerdict, JdRequirement, KnockoutCheck, KnockoutGate,
-  ParseGate, RequirementType,
+  ParseGate, RequirementType, RetrievalQuery, RetrieveGate,
 } from "@/types/analysis";
 import type { StructuredResume } from "./ats-extract";
 import { DEGREE_GROUPS, normalizeSkill, skillAppearsIn } from "./keyword-match";
@@ -191,4 +191,36 @@ export function evaluateKnockoutGate(
       ? "unverifiable"
       : "pass";
   return { verdict, stated: required.length > 0, checks };
+}
+
+// AND pairs come from the top three must-haves only. That bounds the query set
+// by construction — 15 skills yield 15 singles plus 3 pairs, not 105 pairs.
+const AND_PAIR_SOURCE = 3;
+
+export function buildRetrievalQueries(mustHaveNames: string[]): string[][] {
+  const names = mustHaveNames.map((n) => n.trim()).filter((n) => n.length > 0);
+  const queries: string[][] = names.map((n) => [n]);
+  const top = names.slice(0, AND_PAIR_SOURCE);
+  for (let i = 0; i < top.length; i++) {
+    for (let j = i + 1; j < top.length; j++) queries.push([top[i], top[j]]);
+  }
+  return queries;
+}
+
+// Gate 3 — a skill whose only evidence is weak tier still counts as
+// retrievable: a boolean search matches text, not credibility. Credibility is
+// reported as a competitiveness signal instead.
+export function evaluateRetrieveGate(mustHaveNames: string[], resumeText: string): RetrieveGate {
+  const haystack = normalizeSkill(resumeText);
+  const queries: RetrievalQuery[] = buildRetrievalQueries(mustHaveNames).map((terms) => ({
+    label: terms.join(" AND "),
+    terms,
+    surfaces: terms.every((t) => skillAppearsIn(haystack, normalizeSkill(t))),
+  }));
+  return {
+    queries,
+    surfaced: queries.filter((q) => q.surfaces).length,
+    total: queries.length,
+    misses: queries.filter((q) => !q.surfaces).map((q) => q.label),
+  };
 }

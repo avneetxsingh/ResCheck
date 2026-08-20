@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { evaluateParseGate, evaluateKnockoutGate, normalizeRequirementType } from "@/lib/funnel";
+import { evaluateParseGate, evaluateKnockoutGate, normalizeRequirementType, buildRetrievalQueries, evaluateRetrieveGate } from "@/lib/funnel";
 import type { FormattingAudit } from "@/types/analysis";
 import type { JdRequirement } from "@/types/analysis";
 import type { StructuredResume } from "@/lib/ats-extract";
@@ -248,5 +248,59 @@ describe("evaluateKnockoutGate — gate verdict", () => {
     const gate = evaluateKnockoutGate([], CTX);
     expect(gate.checks).toEqual([]);
     expect(gate.stated).toBe(false);
+  });
+});
+
+describe("buildRetrievalQueries", () => {
+  it("issues each must-have alone", () => {
+    expect(buildRetrievalQueries(["React", "SQL"])).toContainEqual(["React"]);
+    expect(buildRetrievalQueries(["React", "SQL"])).toContainEqual(["SQL"]);
+  });
+
+  it("adds AND pairs of the top three only, so the set stays bounded", () => {
+    // 5 singles + the 3 pairs drawn from the first three skills
+    const q = buildRetrievalQueries(["A", "B", "C", "D", "E"]);
+    expect(q).toHaveLength(8);
+    expect(q.filter((t) => t.length === 2)).toEqual([["A", "B"], ["A", "C"], ["B", "C"]]);
+  });
+
+  it("makes no pair from a single skill", () => {
+    expect(buildRetrievalQueries(["React"])).toEqual([["React"]]);
+  });
+
+  it("drops blank names", () => {
+    expect(buildRetrievalQueries(["React", "  "])).toEqual([["React"]]);
+  });
+});
+
+describe("evaluateRetrieveGate", () => {
+  const RESUME = "Built services with React and TypeScript. Deployed on k8s. Wrote SQL by hand.";
+
+  it("a skill present only via alias still surfaces", () => {
+    const gate = evaluateRetrieveGate(["Kubernetes"], RESUME);
+    expect(gate.queries[0].surfaces).toBe(true);
+    expect(gate.misses).toEqual([]);
+  });
+
+  it("names the specific queries that miss", () => {
+    const gate = evaluateRetrieveGate(["React", "Terraform"], RESUME);
+    expect(gate.misses).toContain("Terraform");
+    expect(gate.misses).not.toContain("React");
+  });
+
+  it("an AND pair requires both terms", () => {
+    const gate = evaluateRetrieveGate(["React", "Terraform"], RESUME);
+    expect(gate.misses).toContain("React AND Terraform");
+  });
+
+  it("counts surfaced against total", () => {
+    const gate = evaluateRetrieveGate(["React", "SQL"], RESUME);
+    expect(gate.total).toBe(3); // React, SQL, React AND SQL
+    expect(gate.surfaced).toBe(3);
+  });
+
+  it("no must-have skills yields an empty, non-throwing gate", () => {
+    const gate = evaluateRetrieveGate([], RESUME);
+    expect(gate).toEqual({ queries: [], surfaced: 0, total: 0, misses: [] });
   });
 });
