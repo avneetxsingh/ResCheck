@@ -363,6 +363,17 @@ describe("buildSignals", () => {
     expect(s.find((x) => x.key === "unevidenced_skills")?.value).toBe("1");
   });
 
+  it("reads correctly when exactly one skill is unevidenced", () => {
+    const s = buildSignals({
+      mustHave: [mkSkill("Go", { strength: "weak" })],
+      requiredYears: null, metrics: NO_METRICS,
+    });
+    const signal = s.find((x) => x.key === "unevidenced_skills");
+    expect(signal?.value).toBe("1");
+    expect(signal?.detail).toContain("Go appears in a list");
+    expect(signal?.detail).not.toContain("appear in");
+  });
+
   it("never emits a combined score", () => {
     const s = buildSignals({
       mustHave: [mkSkill("Go", { strength: "weak" })],
@@ -419,6 +430,19 @@ describe("deriveFunnelVerdict", () => {
     expect(deriveFunnelVerdict(funnel({
       knockout: { verdict: "unverifiable", stated: true, checks: [] },
     }))).toBe("moderate");
+  });
+
+  it("exactly half the searches missed is moderate, not needs_work", () => {
+    expect(deriveFunnelVerdict(funnel({
+      retrieve: { queries: [], surfaced: 2, total: 4, misses: ["a", "b"] },
+    }))).toBe("moderate");
+  });
+
+  it("a failed knockout outranks a broken parse", () => {
+    expect(deriveFunnelVerdict(funnel({
+      knockout: { verdict: "fail", stated: true, checks: [] },
+      parse: { verdict: "likely_breaks", reasons: [] },
+    }))).toBe("critical");
   });
 });
 

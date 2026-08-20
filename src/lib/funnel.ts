@@ -287,11 +287,12 @@ export function buildSignals(input: SignalsInput): CompetitivenessSignal[] {
 
   const unevidenced = mustHave.filter((s) => s.strength === "weak");
   if (unevidenced.length > 0) {
+    const named = unevidenced.slice(0, 3).map((s) => s.name);
     signals.push({
       key: "unevidenced_skills",
       label: "Required skills listed but not evidenced",
       value: String(unevidenced.length),
-      detail: `${unevidenced.slice(0, 3).map((s) => s.name).join(", ")} appear in a list with no dated role behind them — that reads as keyword stuffing.`,
+      detail: `${named.join(", ")} ${named.length === 1 ? "appears" : "appear"} in a list with no dated role behind ${named.length === 1 ? "it" : "them"} — that reads as keyword stuffing.`,
     });
   }
 
