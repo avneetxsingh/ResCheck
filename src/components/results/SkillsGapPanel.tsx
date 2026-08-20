@@ -97,7 +97,12 @@ function SkillRow({ skill }: { skill: Skill }) {
             : undefined
         }
       >
-        <SkillBadge skill={skill} />
+        {/* SkillBadge's tooltip trigger renders a real, independently focusable
+            <button> (base-ui useFocus opens the tooltip on keyboard focus), so
+            without this it double-fires the row's click/Enter/Space toggle. */}
+        <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          <SkillBadge skill={skill} />
+        </span>
         {pill && (
           <span
             className={cn(
@@ -180,7 +185,8 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
           {skillsGap.bonus_skills.length > 0 && (
             <p className="text-xs text-primary mt-1.5 flex items-center gap-1">
               <Star className="w-3 h-3" />
-              plus {skillsGap.bonus_skills.length} the posting didn&apos;t ask for
+              plus {skillsGap.bonus_skills.length}{" "}
+              {skillsGap.bonus_skills.length === 1 ? "skill" : "skills"} the posting didn&apos;t ask for
             </p>
           )}
         </div>
