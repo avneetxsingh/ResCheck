@@ -3,16 +3,23 @@
 import { CheckCircle2, XCircle, HelpCircle, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
-import type { FunnelResult, GateVerdict, ParseVerdict } from "@/types/analysis";
+import type { FunnelResult, GateVerdict, ParseVerdict, RetrieveGate } from "@/types/analysis";
 
 interface FunnelPanelProps {
   funnel: FunnelResult;
+  // Stable per-ResultsContainer-instance prefix so gate ids stay unique when
+  // several history entries are expanded (and therefore several FunnelPanels
+  // mounted) at once — GateChips uses the same prefix to target a scroll.
+  idPrefix: string;
+  // Gate id (see idFor below) to ring-highlight briefly after a chip jump.
+  highlightedGateId?: string | null;
 }
 
 // Deliberately three states, not two. "unverifiable" must never read as a
 // pass — a simulated gate that claims certainty about an answer it cannot see
-// is the false precision this funnel replaced.
-const VERDICT_STYLE: Record<GateVerdict | ParseVerdict, {
+// is the false precision this funnel replaced. Exported so GateChips renders
+// the identical icon/colour for a gate instead of inventing its own mapping.
+export const GATE_VERDICT_STYLE: Record<GateVerdict | ParseVerdict, {
   icon: typeof CheckCircle2;
   className: string;
   label: string;
@@ -25,19 +32,40 @@ const VERDICT_STYLE: Record<GateVerdict | ParseVerdict, {
   fail: { icon: XCircle, className: "text-red-600 dark:text-red-400", label: "Blocked" },
 };
 
+// Gate 3 has no AI/code-authored verdict field — it's derived from the
+// surfaced/total counts. Exported so GateChips computes the identical state
+// instead of re-deriving (and risking drifting from) this logic.
+export function retrieveGateState(retrieve: RetrieveGate): keyof typeof GATE_VERDICT_STYLE {
+  if (retrieve.total === 0) return "unverifiable";
+  if (retrieve.misses.length === 0) return "pass";
+  return retrieve.surfaced * 2 < retrieve.total ? "fail" : "risky";
+}
+
+export function idFor(idPrefix: string, gate: "parse" | "knockout" | "retrieve") {
+  return `${idPrefix}-gate-${gate}`;
+}
+
 interface GateProps {
+  id: string;
   step: string;
   title: string;
-  state: keyof typeof VERDICT_STYLE;
+  state: keyof typeof GATE_VERDICT_STYLE;
   summary: string;
+  highlighted?: boolean;
   children?: ReactNode;
 }
 
-function Gate({ step, title, state, summary, children }: GateProps) {
-  const style = VERDICT_STYLE[state];
+function Gate({ id, step, title, state, summary, highlighted, children }: GateProps) {
+  const style = GATE_VERDICT_STYLE[state];
   const Icon = style.icon;
   return (
-    <div className="px-4 py-4">
+    <div
+      id={id}
+      className={cn(
+        "px-4 py-4 motion-safe:transition-shadow motion-safe:duration-700 motion-safe:ease-out",
+        highlighted && "ring-2 ring-inset ring-ring/70"
+      )}
+    >
       <div className="flex items-start gap-3">
         <Icon className={cn("w-4 h-4 mt-0.5 shrink-0", style.className)} />
         <div className="min-w-0 flex-1">
@@ -53,7 +81,7 @@ function Gate({ step, title, state, summary, children }: GateProps) {
   );
 }
 
-export function FunnelPanel({ funnel }: FunnelPanelProps) {
+export function FunnelPanel({ funnel, idPrefix, highlightedGateId }: FunnelPanelProps) {
   const { parse, knockout, retrieve, signals } = funnel;
   const requiredChecks = knockout.checks.filter((c) => c.required);
 
@@ -61,6 +89,8 @@ export function FunnelPanel({ funnel }: FunnelPanelProps) {
     <div className="space-y-6">
       <div className="rounded-xl border border-border/50 divide-y divide-border/50 overflow-hidden">
         <Gate
+          id={idFor(idPrefix, "parse")}
+          highlighted={highlightedGateId === idFor(idPrefix, "parse")}
           step="1"
           title="Parse"
           state={parse.verdict}
@@ -80,6 +110,8 @@ export function FunnelPanel({ funnel }: FunnelPanelProps) {
         </Gate>
 
         <Gate
+          id={idFor(idPrefix, "knockout")}
+          highlighted={highlightedGateId === idFor(idPrefix, "knockout")}
           step="2"
           title="Knockout"
           state={knockout.stated ? knockout.verdict : "unverifiable"}
@@ -92,7 +124,7 @@ export function FunnelPanel({ funnel }: FunnelPanelProps) {
           {knockout.checks.length > 0 && (
             <ul className="mt-2 space-y-1.5">
               {knockout.checks.map((c, i) => {
-                const style = VERDICT_STYLE[c.verdict];
+                const style = GATE_VERDICT_STYLE[c.verdict];
                 return (
                   <li key={i} className="text-xs flex gap-2">
                     <span className={cn("shrink-0 font-medium", style.className)}>{style.label}</span>
@@ -116,9 +148,11 @@ export function FunnelPanel({ funnel }: FunnelPanelProps) {
         </Gate>
 
         <Gate
+          id={idFor(idPrefix, "retrieve")}
+          highlighted={highlightedGateId === idFor(idPrefix, "retrieve")}
           step="3"
           title="Retrieve"
-          state={retrieve.total === 0 ? "unverifiable" : retrieve.misses.length === 0 ? "pass" : retrieve.surfaced * 2 < retrieve.total ? "fail" : "risky"}
+          state={retrieveGateState(retrieve)}
           summary={
             retrieve.total === 0
               ? "No requirements came out of this posting, so no searches could be run."

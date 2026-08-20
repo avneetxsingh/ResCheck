@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { RotateCcw, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,7 +13,10 @@ import { SkillsGapPanel } from "./SkillsGapPanel";
 import { SummaryPanel } from "./SummaryPanel";
 import { ExportButton } from "./ExportButton";
 import { FunnelPanel } from "./FunnelPanel";
+import { GateChips } from "./GateChips";
 import type { AnalysisResult } from "@/types/analysis";
+
+type ResultsTab = "overview" | "errors" | "formatting" | "skills" | "summary";
 
 interface ResultsContainerProps {
   result: AnalysisResult;
@@ -42,6 +45,35 @@ function scoreColorClass(score: number) {
 export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
+  // Unique per mounted ResultsContainer so gate ids never collide when
+  // several history entries are expanded (each renders its own FunnelPanel).
+  const idPrefix = useId();
+  const [activeTab, setActiveTab] = useState<ResultsTab>("overview");
+  const [highlightedGateId, setHighlightedGateId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    };
+  }, []);
+
+  function jumpToGate(gateId: string) {
+    setActiveTab("overview");
+    // The Overview panel unmounts while inactive (base-ui Tabs default), so
+    // the target gate doesn't exist yet on this render — wait two frames for
+    // it to mount and lay out before measuring/scrolling to it.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.getElementById(gateId);
+        el?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+        setHighlightedGateId(gateId);
+        if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = setTimeout(() => setHighlightedGateId(null), 1500);
+      });
+    });
+  }
+
   // Absent on every result written after the funnel shipped; present forever on
   // the ones written before it.
   const legacyOverall = result.scorecard.overall_ats_score?.score;
@@ -72,6 +104,11 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
               <span className={cn("text-lg font-medium", verdict.className)}>{verdict.label}</span>
             )}
           </div>
+          {legacyOverall === undefined && result.funnel && (
+            <div className="mt-3">
+              <GateChips funnel={result.funnel} idPrefix={idPrefix} onSelectGate={jumpToGate} />
+            </div>
+          )}
           <p className="text-sm text-muted-foreground mt-2 flex items-center gap-2 flex-wrap">
             <span>{result.metadata.total_errors_found} issues</span>
             {result.funnel ? (
@@ -125,7 +162,7 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
         </ul>
       )}
 
-      <Tabs defaultValue="overview">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ResultsTab)}>
         <TabsList className="w-full sm:w-auto flex-wrap h-auto gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="errors">
@@ -155,7 +192,9 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
 
         <TabsContent value="overview" className="mt-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
           <div className="space-y-8">
-            {result.funnel && <FunnelPanel funnel={result.funnel} />}
+            {result.funnel && (
+              <FunnelPanel funnel={result.funnel} idPrefix={idPrefix} highlightedGateId={highlightedGateId} />
+            )}
             <ScorecardPanel scorecard={result.scorecard} />
           </div>
         </TabsContent>
