@@ -110,6 +110,83 @@ export interface AtsExtraction {
   warnings: string[]; // parse warnings: garbled chars, missing contact, no headings
 }
 
+// ── Screening funnel ──────────────────────────────────────────────────────
+// Three gates that have honest answers, replacing the invented overall score.
+// Every one of these is optional on AnalysisResult: entries stored before the
+// funnel have none of it and must still render.
+export type ParseVerdict = "clean" | "risky" | "likely_breaks";
+export type GateVerdict = "pass" | "fail" | "unverifiable";
+
+export type RequirementType =
+  | "degree"
+  | "years_experience"
+  | "certification"
+  | "work_authorization"
+  | "location";
+
+// What the posting states, copied by the model. It never assesses the
+// candidate — code performs every comparison against this record.
+export interface JdRequirement {
+  type: RequirementType;
+  value: string;
+  required: boolean;
+}
+
+export interface ParseGate {
+  verdict: ParseVerdict;
+  reasons: string[]; // verbatim from the parse warnings and formatting audit
+}
+
+export interface KnockoutCheck {
+  type: RequirementType;
+  value: string;
+  required: boolean;
+  verdict: GateVerdict;
+  detail: string; // written for the user, not a stack trace
+}
+
+export interface KnockoutGate {
+  verdict: GateVerdict;
+  // false when the posting stated no hard requirements at all. Without this
+  // the "pass" would read as a clearance the app never actually granted.
+  stated: boolean;
+  checks: KnockoutCheck[];
+}
+
+export interface RetrievalQuery {
+  label: string; // "Kubernetes" or "React AND TypeScript"
+  terms: string[];
+  surfaces: boolean;
+}
+
+export interface RetrieveGate {
+  queries: RetrievalQuery[];
+  surfaced: number;
+  total: number;
+  misses: string[]; // labels of the queries that do not surface the resume
+}
+
+// Named factors with their values. Never combined into a score — combining
+// them would reinvent the number the funnel exists to remove.
+export interface CompetitivenessSignal {
+  key:
+    | "total_experience"
+    | "skill_recency"
+    | "avg_tenure"
+    | "employment_gaps"
+    | "unevidenced_skills";
+  label: string;
+  value: string;
+  detail: string;
+}
+
+export interface FunnelResult {
+  parse: ParseGate;
+  knockout: KnockoutGate;
+  retrieve: RetrieveGate;
+  signals: CompetitivenessSignal[];
+}
+
 export interface AnalysisResult {
   scorecard: Scorecard;
   skills_gap: SkillsGapAnalysis;

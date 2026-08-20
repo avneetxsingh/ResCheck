@@ -24,6 +24,16 @@ export function normalizeSkill(s: string): string {
     .trim();
 }
 
+// Degree requirements: the JD-side form comes from the AI ("Bachelor's degree"),
+// the resume-side forms are how people actually write them. Levels are ordered
+// so Gate 2 can decide "equal or higher" — they are the alias table and the
+// degree ladder at once, so the two can never drift apart.
+export const DEGREE_GROUPS: { level: number; aliases: string[] }[] = [
+  { level: 1, aliases: ["bachelor s degree", "bachelors degree", "bachelor s", "bachelor", "b.s.", "b.a.", "bsc", "undergraduate degree"] },
+  { level: 2, aliases: ["master s degree", "masters degree", "master s", "masters", "m.s.", "msc"] },
+  { level: 3, aliases: ["phd", "ph.d.", "ph.d", "doctorate", "doctoral degree"] },
+];
+
 const ALIAS_GROUPS: string[][] = [
   ["javascript", "js", "ecmascript"],
   ["typescript", "ts"],
@@ -39,11 +49,7 @@ const ALIAS_GROUPS: string[][] = [
   ["user experience", "ux"],
   ["user interface", "ui"],
   ["next.js", "nextjs", "next js"],
-  // Degree requirements: the JD-side form comes from the AI ("Bachelor's degree"),
-  // the resume-side forms are how people actually write them.
-  ["bachelor s degree", "bachelors degree", "bachelor s", "bachelor", "b.s.", "b.a.", "bsc", "undergraduate degree"],
-  ["master s degree", "masters degree", "master s", "masters", "m.s.", "msc"],
-  ["phd", "ph.d.", "ph.d", "doctorate", "doctoral degree"],
+  ...DEGREE_GROUPS.map((g) => g.aliases),
 ];
 
 function aliasesFor(norm: string): string[] {
@@ -62,7 +68,7 @@ function containsTerm(haystackNorm: string, term: string): boolean {
 // One predicate for "does this text mention this skill", shared by the
 // top-level match and by evidence gathering. Filtering evidence on the literal
 // term alone rated every alias and all-word match as unbacked.
-function skillAppearsIn(haystackNorm: string, norm: string): boolean {
+export function skillAppearsIn(haystackNorm: string, norm: string): boolean {
   if (containsTerm(haystackNorm, norm)) return true;
   if (aliasesFor(norm).some((a) => containsTerm(haystackNorm, a))) return true;
   const hit = (w: string) =>
