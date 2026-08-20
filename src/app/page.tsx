@@ -1,11 +1,5 @@
-import { HeroSection } from "@/components/landing/HeroSection";
-import { HowItWorksSection } from "@/components/landing/HowItWorksSection";
+import { Workspace } from "@/components/workspace/Workspace";
 
 export default function HomePage() {
-  return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6">
-      <HeroSection />
-      <HowItWorksSection />
-    </div>
-  );
+  return <Workspace />;
 }
