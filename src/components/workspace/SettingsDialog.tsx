@@ -29,13 +29,16 @@ export function SettingsDialog({
   const [model, setModel] = useState("");
   const [showKey, setShowKey] = useState(false);
 
+  // Local state persists between opens because the dialog never unmounts, so
+  // a cancelled edit would still be sitting there on the next open — and
+  // saving it could switch the active provider to one with no key. Re-sync
+  // from the real settings every time the dialog opens.
   useEffect(() => {
-    if (hydrated) {
-      setProvider(settings.provider);
-      setApiKey(settings.apiKeys[settings.provider] ?? "");
-      setModel(settings.model);
-    }
-  }, [hydrated, settings]);
+    if (!open || !hydrated) return;
+    setProvider(settings.provider);
+    setApiKey(settings.apiKeys[settings.provider] ?? "");
+    setModel(settings.model);
+  }, [open, hydrated, settings]);
 
   const active = PROVIDERS[provider];
   const isValidKey = apiKey.startsWith(active.keyPrefix) && apiKey.length > 20;
@@ -119,7 +122,7 @@ export function SettingsDialog({
             </a>
             {apiKey.length > 0 && !isValidKey && (
               <p className="text-xs text-state-warn">
-                That doesn&apos;t look like a {active.label} key — they start with{" "}
+                That doesn&apos;t look like a {active.label} key — it starts with{" "}
                 <span className="font-mono">{active.keyPrefix}</span>.
               </p>
             )}
