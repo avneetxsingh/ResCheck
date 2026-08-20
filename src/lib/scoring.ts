@@ -118,8 +118,14 @@ export function buildFallbackSummary(input: FallbackInput): ExecutiveSummary {
   const { scorecard: sc, verdict, funnel, mustHave, errors, bonusSkills } = input;
   const failed = funnel.knockout.checks.filter((c) => c.required && c.verdict === "fail");
   const unverifiable = funnel.knockout.checks.filter((c) => c.required && c.verdict === "unverifiable");
+  // Only work_authorization/location are the "form will ask" case — a degree
+  // or years check that came back unverifiable (e.g. no education section
+  // parsed) needs its own sentence, not this one folded around it.
+  const formAsks = unverifiable.filter((c) => c.type === "work_authorization" || c.type === "location");
+  const otherUnverifiable = unverifiable.filter((c) => c.type !== "work_authorization" && c.type !== "location");
   const exact = mustHave.filter((s) => s.match_strength === "exact").map((s) => s.name);
   const critical = errors.filter((e) => e.severity === "critical");
+  const bonusNamed = bonusSkills.slice(0, 3);
 
   const strengths = [
     funnel.parse.verdict === "clean" ? "The document parses cleanly — an ATS can read every section." : null,
@@ -127,7 +133,9 @@ export function buildFallbackSummary(input: FallbackInput): ExecutiveSummary {
       ? `Your resume surfaces for all ${funnel.retrieve.total} recruiter searches built from this posting.`
       : null,
     exact.length > 0 ? `${exact.slice(0, 3).join(", ")} — required, and clearly there.` : null,
-    bonusSkills.length > 0 ? `${bonusSkills.slice(0, 3).join(", ")} go beyond what the posting asks for.` : null,
+    bonusNamed.length > 0
+      ? `${bonusNamed.join(", ")} ${bonusNamed.length === 1 ? "goes" : "go"} beyond what the posting asks for.`
+      : null,
     sc.impact_score.score >= 75 ? "Bullets carry real numbers, which is what gets read." : null,
     sc.grammar_score.score >= 82 ? "The writing is clean — little to no language errors." : null,
   ].filter((s): s is string => s !== null);
@@ -140,9 +148,10 @@ export function buildFallbackSummary(input: FallbackInput): ExecutiveSummary {
     funnel.retrieve.misses.length > 0
       ? `Your resume doesn't surface for ${funnel.retrieve.misses.slice(0, 3).join(", ")}.`
       : null,
-    unverifiable.length > 0
-      ? `The application form will ask about ${unverifiable.map((c) => c.value).join(", ")} — ResCheck can't see that, so check it yourself.`
+    formAsks.length > 0
+      ? `The application form will ask about ${formAsks.map((c) => c.value).join(", ")} — ResCheck can't see that, so check it yourself.`
       : null,
+    otherUnverifiable.length > 0 ? otherUnverifiable.map((c) => c.detail).join(" ") : null,
     critical.length > 0
       ? `${critical.length} critical writing ${critical.length === 1 ? "error" : "errors"} — fix ${critical.length === 1 ? "that" : "those"} before anything else.`
       : null,
@@ -152,14 +161,24 @@ export function buildFallbackSummary(input: FallbackInput): ExecutiveSummary {
   const pad = (arr: string[], filler: string[]): string[] =>
     [...arr, ...filler.filter((f) => !arr.includes(f))].slice(0, 3);
 
+  // Fillers pad the list when real strengths run short. They must be true
+  // regardless of what else is on the page, so each is conditional on the
+  // exact gate it describes actually being clean — the previous static
+  // fillers claimed a clean parse and a vocabulary match unconditionally,
+  // which could sit next to a Gate 1 "likely_breaks" or a Gate 3 all-miss in
+  // the same view.
+  const strengthFillers = [
+    funnel.parse.verdict === "clean" ? "Sections follow the structure screeners expect." : null,
+    funnel.parse.verdict === "clean" ? "Contact details are where a parser looks for them." : null,
+    funnel.retrieve.total > 0 && funnel.retrieve.misses.length === 0
+      ? "The posting's own vocabulary shows up in the resume text."
+      : null,
+  ].filter((s): s is string => s !== null);
+
   return {
     verdict,
     headline: VERDICT_HEADLINE[verdict],
-    top_strengths: pad(strengths, [
-      "Sections follow the structure screeners expect.",
-      "Contact details are where a parser looks for them.",
-      "The posting's own vocabulary shows up in the resume text.",
-    ]),
+    top_strengths: pad(strengths, strengthFillers),
     top_improvements: pad(improvements, [
       "Where you match a requirement, use the posting's exact words.",
       "Start every bullet with a verb that did something.",

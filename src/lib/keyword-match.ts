@@ -31,14 +31,14 @@ export function normalizeSkill(s: string): string {
 export const DEGREE_GROUPS: { level: number; aliases: string[]; ambiguous: string[] }[] = [
   {
     level: 1,
-    aliases: ["bachelor s degree", "bachelors degree", "bachelor s", "bachelor", "b.s.", "b.a.", "bsc", "undergraduate degree"],
+    aliases: ["bachelor s degree", "bachelors degree", "bachelor s", "bachelor", "b.s.", "b.a.", "bs", "bsc", "undergraduate degree"],
     // Someone can write these without holding the degree ("Bachelor's Program
     // coordinator"), so Gate 2 treats a match on them as unproven, not absent.
     ambiguous: ["bachelor s", "bachelor"],
   },
   {
     level: 2,
-    aliases: ["master s degree", "masters degree", "master s", "masters", "m.s.", "msc"],
+    aliases: ["master s degree", "masters degree", "master s", "masters", "m.s.", "ms", "msc"],
     ambiguous: ["master s", "masters"],
   },
   { level: 3, aliases: ["phd", "ph.d.", "ph.d", "doctorate", "doctoral degree"], ambiguous: [] },
@@ -139,9 +139,8 @@ export function buildSkills(
       const words = norm.split(" ").filter((w) => w.length > 2);
       if (words.length >= 2 && words.every(wordHit)) {
         // Every word of the skill is in the resume, so it IS present. Leaving
-        // this false undercounted keyword_density_score, which reads
-        // present_in_resume — a skill could rate "strong" and still be
-        // tallied as missing.
+        // this false would undercount present_in_resume — a skill could rate
+        // "strong" via evidence and still be tallied as missing here.
         present = true;
         legacyStrength = "partial";
       }

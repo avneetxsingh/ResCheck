@@ -371,11 +371,19 @@ export async function POST(req: NextRequest) {
           warn("Couldn't locate your job entries in the resume text — skills are matched without recency this run.");
         }
         // Work-history metrics feed both Gate 2's years check and the
-        // competitiveness signals. Only anchored, fully dated roles count —
-        // an unanchored role has no text and an undated one has no span.
-        const datedRanges = anchoredRoles
+        // competitiveness signals. Anchoring only decides whether a role has
+        // TEXT to evidence a skill against — it says nothing about whether
+        // the role's dates parsed, and segmentRoles fills in `range` for
+        // unanchored roles too. Building dates from anchoredRoles alone would
+        // compute total experience from a subset of the roles while
+        // hasDatedRoles stayed true, letting the years check report a
+        // confident fail off incomplete data. Dates come from ALL roles.
+        const datedRanges = roles
           .map((r) => r.range)
           .filter((r) => r.start !== null && r.end !== null);
+        // True only when every reported role's dates parsed — a fail the
+        // years check reports on a subset isn't a fail, see funnel.ts.
+        const datedRolesComplete = datedRanges.length === roles.length;
         const workMetrics = computeWorkHistoryMetrics(datedRanges);
         const skillOpts = { structured, roles: anchoredRoles };
         // "No Kubernetes experience required" must not register as a requirement.
@@ -408,6 +416,7 @@ export async function POST(req: NextRequest) {
           requirements: jd.requirements,
           mustHave, metrics: workMetrics,
           hasDatedRoles: datedRanges.length > 0,
+          datedRolesComplete,
         });
         // The verdict is derived from the gates now — it cannot outlive the
         // overall score it used to be bracketed from.

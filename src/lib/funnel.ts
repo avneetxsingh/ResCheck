@@ -60,6 +60,29 @@ export function normalizeRequirementType(raw: string): RequirementType | null {
 // precision the funnel exists to remove, so the answer is always the same one.
 const NEVER_VERIFIABLE: RequirementType[] = ["work_authorization", "location"];
 
+// The model files an eligibility or location condition under other declared
+// types too (normalizeRequirementType maps "license" -> certification), so
+// NEVER_VERIFIABLE cannot rely on r.type alone — it must also recognize the
+// condition from its own wording. A work-eligibility "fail" produced by this
+// gap is exactly what the honesty requirement bans.
+const ELIGIBILITY_OR_LOCATION_PATTERN =
+  /authoriz|authoris|visa|sponsor|citizen|work permit|eligib|relocat|onsite|on-site|hybrid|remote/i;
+const LOCATION_ONLY_PATTERN = /relocat|onsite|on-site|hybrid|remote/i;
+
+const WORK_AUTH_DETAIL =
+  "A resume doesn't state work authorization, and ResCheck never sees the application form — the form will ask this, so check it yourself.";
+const LOCATION_DETAIL =
+  "A resume doesn't state location or willingness to relocate — the application form will ask, so check it yourself.";
+
+// Returns which never-verifiable copy applies, or null when the requirement
+// is neither. LOCATION_ONLY_PATTERN decides only which detail string to show
+// when the type itself doesn't say — the trigger is the combined pattern.
+function neverVerifiableType(r: JdRequirement): "work_authorization" | "location" | null {
+  if (NEVER_VERIFIABLE.includes(r.type)) return r.type as "work_authorization" | "location";
+  if (!ELIGIBILITY_OR_LOCATION_PATTERN.test(r.value)) return null;
+  return LOCATION_ONLY_PATTERN.test(r.value) ? "location" : "work_authorization";
+}
+
 // Resume dates land on month boundaries the candidate rounded themselves, so
 // someone within a quarter of the requirement is not "clearly below" it.
 const YEARS_GRACE_MONTHS = 3;
@@ -69,6 +92,10 @@ export interface KnockoutContext {
   resumeText: string;
   totalExperienceMonths: number;
   hasDatedRoles: boolean;
+  // False when some role the model reported has no parsed date range, so
+  // totalExperienceMonths is built from a subset of the roles rather than
+  // all of them — a shortfall computed on that subset is not proof of one.
+  datedRolesComplete: boolean;
 }
 
 export function monthsLabel(months: number): string {
@@ -91,24 +118,49 @@ function containsLiteral(haystackNorm: string, term: string): boolean {
   return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`).test(haystackNorm);
 }
 
-// The highest degree level claimed as a credential ("M.S.", "Master's degree")
-// and the highest named at all, including bare mentions ("Master's"), which
-// someone can write without holding one. Gate 2 needs both: a bare mention is
-// not proof of the degree, and not proof of its absence either.
-function degreeLevelsIn(text: string): { credential: number; any: number } {
+// Every degree level a text names, split by how strongly it's named: as a
+// credential form ("M.S.", "Master's degree") or only a bare, ambiguous
+// mention ("Master's Program"). One scan feeds both degreeLevelsIn (resume
+// side, wants the highest held) and minDegreeLevelIn (requirement side, wants
+// the lowest named — see that function for why).
+function matchedDegreeLevels(text: string): { credential: number[]; any: number[] } {
   const norm = normalizeSkill(text);
-  let credential = 0;
-  let any = 0;
+  const credential: number[] = [];
+  const any: number[] = [];
   for (const group of DEGREE_GROUPS) {
     const credentialForms = group.aliases.filter((a) => !group.ambiguous.includes(a));
     if (credentialForms.some((a) => containsLiteral(norm, a))) {
-      credential = Math.max(credential, group.level);
-      any = Math.max(any, group.level);
+      credential.push(group.level);
+      any.push(group.level);
     } else if (group.ambiguous.some((a) => skillAppearsIn(norm, a))) {
-      any = Math.max(any, group.level);
+      any.push(group.level);
     }
   }
   return { credential, any };
+}
+
+// The highest degree level claimed as a credential ("M.S.", "Master's degree")
+// and the highest named at all, including bare mentions ("Master's"), which
+// someone can write without holding one. Gate 2 needs both: a bare mention is
+// not proof of the degree, and not proof of its absence either. Used on the
+// RESUME side, where the candidate's highest credential should count.
+function degreeLevelsIn(text: string): { credential: number; any: number } {
+  const { credential, any } = matchedDegreeLevels(text);
+  return {
+    credential: credential.length > 0 ? Math.max(...credential) : 0,
+    any: any.length > 0 ? Math.max(...any) : 0,
+  };
+}
+
+// The LOWEST degree level a requirement names is the one that satisfies it:
+// "Bachelor's or Master's degree", "BS/MS in Computer Science" and
+// "Bachelor's required, Master's preferred" are ordinary either/or phrasings
+// that a Bachelor's holder clears, not a Master's requirement. Math.max is
+// only correct on the resume side (degreeLevelsIn); the requirement side
+// takes the minimum of whatever levels the text names.
+function minDegreeLevelIn(text: string): number {
+  const { any } = matchedDegreeLevels(text);
+  return any.length > 0 ? Math.min(...any) : 0;
 }
 
 function requiredYears(value: string): number | null {
@@ -119,14 +171,12 @@ function requiredYears(value: string): number | null {
 function checkRequirement(r: JdRequirement, ctx: KnockoutContext): KnockoutCheck {
   const base = { type: r.type, value: r.value, required: r.required };
 
-  if (NEVER_VERIFIABLE.includes(r.type)) {
+  const forcedType = neverVerifiableType(r);
+  if (forcedType) {
     return {
       ...base,
       verdict: "unverifiable",
-      detail:
-        r.type === "work_authorization"
-          ? "A resume doesn't state work authorization, and ResCheck never sees the application form — the form will ask this, so check it yourself."
-          : "A resume doesn't state location or willingness to relocate — the application form will ask, so check it yourself.",
+      detail: forcedType === "work_authorization" ? WORK_AUTH_DETAIL : LOCATION_DETAIL,
     };
   }
 
@@ -135,7 +185,7 @@ function checkRequirement(r: JdRequirement, ctx: KnockoutContext): KnockoutCheck
     if (education.length === 0) {
       return { ...base, verdict: "unverifiable", detail: "No education section could be parsed, so this couldn't be checked." };
     }
-    const needed = degreeLevelsIn(r.value).any;
+    const needed = minDegreeLevelIn(r.value);
     if (needed === 0) {
       return {
         ...base,
@@ -166,17 +216,42 @@ function checkRequirement(r: JdRequirement, ctx: KnockoutContext): KnockoutCheck
       return { ...base, verdict: "unverifiable", detail: "No dated roles could be located in the resume, so total experience is unknown." };
     }
     const detail = `${monthsLabel(ctx.totalExperienceMonths)} of dated experience against ${years} year${years === 1 ? "" : "s"} required.`;
-    return ctx.totalExperienceMonths + YEARS_GRACE_MONTHS >= years * 12
-      ? { ...base, verdict: "pass", detail }
-      : { ...base, verdict: "fail", detail };
+    if (ctx.totalExperienceMonths + YEARS_GRACE_MONTHS >= years * 12) {
+      return { ...base, verdict: "pass", detail };
+    }
+    // A shortfall computed from an incomplete date set isn't proof of one —
+    // an unread role's dates could close the gap. More evidence only ever
+    // raises the total, so a PASS above stands on incomplete data; a FAIL
+    // does not.
+    if (!ctx.datedRolesComplete) {
+      return {
+        ...base,
+        verdict: "unverifiable",
+        detail: `${detail} Some of your roles' dates couldn't be read, so this total may be incomplete — check it yourself.`,
+      };
+    }
+    return { ...base, verdict: "fail", detail };
   }
 
-  // certification — the resume text already contains the certifications
-  // section, so one haystack covers both places the spec asks us to look.
-  const found = skillAppearsIn(normalizeSkill(ctx.resumeText), normalizeSkill(r.value));
-  return found
-    ? { ...base, verdict: "pass", detail: `"${r.value}" appears in your resume.` }
-    : { ...base, verdict: "fail", detail: `"${r.value}" doesn't appear anywhere in your resume.` };
+  // certification — a credential name needs a literal, contiguous match
+  // (containsLiteral), the same rule degree credential forms use: scattered
+  // words ("AWS" ... "solutions" ... "Architect" as a job title) are not the
+  // same claim as holding "AWS Solutions Architect". A fuzzy-only hit reports
+  // unverifiable, never a pass — this is the only true auto-rejection gate,
+  // so a false pass here is the costliest mistake this file can make.
+  const resumeNorm = normalizeSkill(ctx.resumeText);
+  const certNorm = normalizeSkill(r.value);
+  if (containsLiteral(resumeNorm, certNorm)) {
+    return { ...base, verdict: "pass", detail: `"${r.value}" appears in your resume.` };
+  }
+  if (skillAppearsIn(resumeNorm, certNorm)) {
+    return {
+      ...base,
+      verdict: "unverifiable",
+      detail: `The exact credential "${r.value}" wasn't found, but related words appear elsewhere in your resume — check this one yourself.`,
+    };
+  }
+  return { ...base, verdict: "fail", detail: `"${r.value}" doesn't appear anywhere in your resume.` };
 }
 
 // Gate 2 — a requirement the posting marks preferred is checked identically but
@@ -299,13 +374,20 @@ export function buildSignals(input: SignalsInput): CompetitivenessSignal[] {
   return signals;
 }
 
+// Prefers a required years item — that's the one that can actually knock
+// someone out, so it's the one the "how you sort" signal should be measured
+// against. Only falls back to a preferred item when the posting states no
+// required one, rather than letting requirements-array order decide.
 export function firstRequiredYears(requirements: JdRequirement[]): number | null {
+  let fallback: number | null = null;
   for (const r of requirements) {
     if (r.type !== "years_experience") continue;
     const years = requiredYears(r.value);
-    if (years !== null) return years;
+    if (years === null) continue;
+    if (r.required) return years;
+    if (fallback === null) fallback = years;
   }
-  return null;
+  return fallback;
 }
 
 // Replaces the verdict that used to be derived from overall_ats_score. It is
@@ -315,7 +397,17 @@ export function deriveFunnelVerdict(funnel: FunnelResult): ExecutiveSummary["ver
   if (knockout.verdict === "fail") return "critical";
   const majorityMissed = retrieve.total > 0 && retrieve.surfaced * 2 < retrieve.total;
   if (parse.verdict === "likely_breaks" || majorityMissed) return "needs_work";
-  if (parse.verdict === "risky" || knockout.verdict === "unverifiable" || retrieve.misses.length > 0) {
+  // "strong" claims all three gates were checked AND cleared — a gate that
+  // was never actually run (no stated knockout condition, or no retrievable
+  // must-have skills) cannot count as cleared, or the headline built on this
+  // verdict (VERDICT_HEADLINE.strong) would claim a clearance nothing granted.
+  const allGatesChecked = knockout.stated && retrieve.total > 0;
+  if (
+    !allGatesChecked ||
+    parse.verdict === "risky" ||
+    knockout.verdict === "unverifiable" ||
+    retrieve.misses.length > 0
+  ) {
     return "moderate";
   }
   return "strong";
@@ -329,6 +421,9 @@ export interface FunnelInput {
   mustHave: Skill[];
   metrics: WorkHistoryMetrics;
   hasDatedRoles: boolean;
+  // False when the model reported a role whose dates didn't parse — see
+  // KnockoutContext.datedRolesComplete.
+  datedRolesComplete: boolean;
 }
 
 export function buildFunnel(input: FunnelInput): FunnelResult {
@@ -339,6 +434,7 @@ export function buildFunnel(input: FunnelInput): FunnelResult {
       resumeText: input.resumeText,
       totalExperienceMonths: input.metrics.total_experience_months,
       hasDatedRoles: input.hasDatedRoles,
+      datedRolesComplete: input.datedRolesComplete,
     }),
     retrieve: evaluateRetrieveGate(
       input.mustHave.map((s) => s.name),

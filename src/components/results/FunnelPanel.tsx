@@ -3,7 +3,7 @@
 import { CheckCircle2, XCircle, HelpCircle, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
-import type { FunnelResult, GateVerdict } from "@/types/analysis";
+import type { FunnelResult, GateVerdict, ParseVerdict } from "@/types/analysis";
 
 interface FunnelPanelProps {
   funnel: FunnelResult;
@@ -12,7 +12,7 @@ interface FunnelPanelProps {
 // Deliberately three states, not two. "unverifiable" must never read as a
 // pass — a simulated gate that claims certainty about an answer it cannot see
 // is the false precision this funnel replaced.
-const VERDICT_STYLE: Record<GateVerdict | "risky" | "likely_breaks" | "clean", {
+const VERDICT_STYLE: Record<GateVerdict | ParseVerdict, {
   icon: typeof CheckCircle2;
   className: string;
   label: string;
@@ -105,7 +105,9 @@ export function FunnelPanel({ funnel }: FunnelPanelProps) {
               })}
             </ul>
           )}
-          {requiredChecks.some((c) => c.verdict === "unverifiable") && (
+          {requiredChecks.some(
+            (c) => (c.type === "work_authorization" || c.type === "location") && c.verdict === "unverifiable"
+          ) && (
             <p className="text-xs text-muted-foreground mt-2">
               A resume never states work authorization or location, and ResCheck never sees the
               application form. Those are yours to confirm — not a pass and not a failure.

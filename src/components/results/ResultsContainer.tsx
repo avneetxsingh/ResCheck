@@ -74,14 +74,24 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
           </div>
           <p className="text-sm text-muted-foreground mt-2 flex items-center gap-2 flex-wrap">
             <span>{result.metadata.total_errors_found} issues</span>
-            <span aria-hidden>·</span>
             {result.funnel ? (
-              <span>
-                surfaces for {result.funnel.retrieve.surfaced} of {result.funnel.retrieve.total} searches
-              </span>
+              // Zero must-haves means no searches could be built at all — Gate
+              // 3 already has dedicated copy for that; "0 of 0 searches" here
+              // would just be noise beside it.
+              result.funnel.retrieve.total > 0 && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>
+                    surfaces for {result.funnel.retrieve.surfaced} of {result.funnel.retrieve.total} searches
+                  </span>
+                </>
+              )
             ) : (
               typeof result.skills_gap.overall_match_percentage === "number" && (
-                <span>{result.skills_gap.overall_match_percentage}% skill match</span>
+                <>
+                  <span aria-hidden>·</span>
+                  <span>{result.skills_gap.overall_match_percentage}% skill match</span>
+                </>
               )
             )}
             {result.metadata.jd_quality && (

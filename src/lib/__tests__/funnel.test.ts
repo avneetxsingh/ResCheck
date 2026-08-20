@@ -87,6 +87,7 @@ const CTX = {
   resumeText: "Jane Doe\nSenior Engineer at Acme\nB.S. Computer Science, State University",
   totalExperienceMonths: 72,
   hasDatedRoles: true,
+  datedRolesComplete: true,
 };
 
 describe("normalizeRequirementType", () => {
@@ -169,6 +170,25 @@ describe("evaluateKnockoutGate — degree", () => {
     const ctx = { ...CTX, structured: withEducation(["M.S. Computer Science, State University"]) };
     expect(evaluateKnockoutGate([req("degree", "Master's degree")], ctx).checks[0].verdict).toBe("pass");
   });
+
+  // A B.S. holder against multi-level phrasing: the LOWEST level a requirement
+  // names is the one that satisfies it, not the highest (Math.max is only
+  // correct on the resume/held side).
+  it("'Bachelor's or Master's degree' passes a B.S. holder", () => {
+    expect(evaluateKnockoutGate([req("degree", "Bachelor's or Master's degree")], CTX).checks[0].verdict).toBe("pass");
+  });
+
+  it("'BS/MS in Computer Science' passes a B.S. holder", () => {
+    expect(evaluateKnockoutGate([req("degree", "BS/MS in Computer Science")], CTX).checks[0].verdict).toBe("pass");
+  });
+
+  it("'Bachelor's required, Master's preferred' passes a B.S. holder", () => {
+    expect(evaluateKnockoutGate([req("degree", "Bachelor's required, Master's preferred")], CTX).checks[0].verdict).toBe("pass");
+  });
+
+  it("a plain 'Master's degree' still fails a B.S. holder", () => {
+    expect(evaluateKnockoutGate([req("degree", "Master's degree")], CTX).checks[0].verdict).toBe("fail");
+  });
 });
 
 describe("evaluateKnockoutGate — years of experience", () => {
@@ -196,16 +216,41 @@ describe("evaluateKnockoutGate — years of experience", () => {
   it("a requirement stating no number is unverifiable", () => {
     expect(evaluateKnockoutGate([req("years_experience", "several years")], CTX).checks[0].verdict).toBe("unverifiable");
   });
+
+  it("a shortfall computed from an INCOMPLETE dated-role set is unverifiable, not a fail", () => {
+    const ctx = { ...CTX, totalExperienceMonths: 36, datedRolesComplete: false };
+    const gate = evaluateKnockoutGate([req("years_experience", "5")], ctx);
+    expect(gate.checks[0].verdict).toBe("unverifiable");
+  });
+
+  it("a shortfall computed from a COMPLETE dated-role set still fails", () => {
+    const ctx = { ...CTX, totalExperienceMonths: 36, datedRolesComplete: true };
+    expect(evaluateKnockoutGate([req("years_experience", "5")], ctx).checks[0].verdict).toBe("fail");
+  });
+
+  it("an incomplete dated-role set that already clears the bar still passes", () => {
+    const ctx = { ...CTX, totalExperienceMonths: 72, datedRolesComplete: false };
+    expect(evaluateKnockoutGate([req("years_experience", "5")], ctx).checks[0].verdict).toBe("pass");
+  });
 });
 
 describe("evaluateKnockoutGate — certification", () => {
-  it("passes when the certification appears in the resume", () => {
+  it("passes when the certification appears verbatim in the resume", () => {
     const ctx = { ...CTX, resumeText: `${CTX.resumeText}\nAWS Solutions Architect, 2024` };
     expect(evaluateKnockoutGate([req("certification", "AWS Solutions Architect")], ctx).checks[0].verdict).toBe("pass");
   });
 
-  it("fails when it does not", () => {
+  it("fails when none of the words appear at all", () => {
     expect(evaluateKnockoutGate([req("certification", "AWS Solutions Architect")], CTX).checks[0].verdict).toBe("fail");
+  });
+
+  it("scattered, non-contiguous words are unverifiable, never a pass", () => {
+    const ctx = {
+      ...CTX,
+      resumeText: `${CTX.resumeText}\nAWS certified. Delivered solutions as a Senior Architect.`,
+    };
+    const gate = evaluateKnockoutGate([req("certification", "AWS Solutions Architect")], ctx);
+    expect(gate.checks[0].verdict).toBe("unverifiable");
   });
 });
 
@@ -220,6 +265,18 @@ describe("evaluateKnockoutGate — the honesty guarantee", () => {
   it("location is unverifiable no matter what the resume says", () => {
     const ctx = { ...CTX, resumeText: "Austin, TX — open to hybrid work" };
     expect(evaluateKnockoutGate([req("location", "Hybrid, Austin TX")], ctx).checks[0].verdict).toBe("unverifiable");
+  });
+
+  // normalizeRequirementType maps "license"/"licence" onto "certification", so
+  // the model can file a work-eligibility condition under a type the honesty
+  // guarantee doesn't recognize by name alone — it must recognize the wording.
+  it("an eligibility condition filed under an unrelated type is still unverifiable", () => {
+    const gate = evaluateKnockoutGate(
+      [req("certification", "authorized to work in the US")],
+      CTX
+    );
+    expect(gate.checks[0].verdict).toBe("unverifiable");
+    expect(gate.checks[0].verdict).not.toBe("fail");
   });
 });
 
@@ -393,6 +450,16 @@ describe("firstRequiredYears", () => {
   it("is null when the posting states none", () => {
     expect(firstRequiredYears([req("degree", "Bachelor's")])).toBeNull();
   });
+
+  it("prefers a required years item over a preferred one, regardless of order", () => {
+    expect(
+      firstRequiredYears([req("years_experience", "3", false), req("years_experience", "5")])
+    ).toBe(5);
+  });
+
+  it("falls back to a preferred years item only when no required one exists", () => {
+    expect(firstRequiredYears([req("years_experience", "3", false)])).toBe(3);
+  });
 });
 
 describe("deriveFunnelVerdict", () => {
@@ -444,6 +511,29 @@ describe("deriveFunnelVerdict", () => {
       parse: { verdict: "likely_breaks", reasons: [] },
     }))).toBe("critical");
   });
+
+  // CRITICAL 1 — a gate that was never actually checked must not read as
+  // cleared. evaluateKnockoutGate returns stated=false (a clean pass) when the
+  // posting names no required condition; without capping the verdict, this
+  // reads identically to a posting whose stated conditions were all verified.
+  it("an unstated knockout (nothing was checked) caps at moderate, not strong", () => {
+    expect(deriveFunnelVerdict(funnel({
+      knockout: { verdict: "pass", stated: false, checks: [] },
+    }))).toBe("moderate");
+  });
+
+  it("zero retrievable must-haves (no searches ran) caps at moderate, not strong", () => {
+    expect(deriveFunnelVerdict(funnel({
+      retrieve: { queries: [], surfaced: 0, total: 0, misses: [] },
+    }))).toBe("moderate");
+  });
+
+  it("a required knockout failure still outranks an unchecked gate", () => {
+    expect(deriveFunnelVerdict(funnel({
+      knockout: { verdict: "fail", stated: true, checks: [] },
+      retrieve: { queries: [], surfaced: 0, total: 0, misses: [] },
+    }))).toBe("critical");
+  });
 });
 
 describe("buildFunnel", () => {
@@ -456,6 +546,7 @@ describe("buildFunnel", () => {
       mustHave: [mkSkill("React"), mkSkill("SQL")],
       metrics: { ...NO_METRICS, total_experience_months: 72, avg_tenure_months: 24 },
       hasDatedRoles: true,
+      datedRolesComplete: true,
     });
     expect(out.parse.verdict).toBe("clean");
     expect(out.knockout.verdict).toBe("pass");
