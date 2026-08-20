@@ -2,12 +2,14 @@
 // Every verdict here is produced by code, so two runs of the same resume
 // against the same posting always agree — no model judgment is involved.
 import type {
-  FormattingAudit, GateVerdict, JdRequirement, KnockoutCheck, KnockoutGate,
-  ParseGate, RequirementType, RetrievalQuery, RetrieveGate,
+  CompetitivenessSignal, ExecutiveSummary, FormattingAudit, FunnelResult, GateVerdict,
+  JdRequirement, KnockoutCheck, KnockoutGate, ParseGate, RequirementType, RetrievalQuery,
+  RetrieveGate, Skill,
 } from "@/types/analysis";
 import type { StructuredResume } from "./ats-extract";
 import { DEGREE_GROUPS, normalizeSkill, skillAppearsIn } from "./keyword-match";
 import { AUDIT_KEYS } from "./scoring";
+import type { WorkHistoryMetrics } from "./work-history";
 
 const RISKY_AUDIT_ISSUES = 4;
 
@@ -222,5 +224,129 @@ export function evaluateRetrieveGate(mustHaveNames: string[], resumeText: string
     surfaced: queries.filter((q) => q.surfaces).length,
     total: queries.length,
     misses: queries.filter((q) => !q.surfaces).map((q) => q.label),
+  };
+}
+
+// A skill last used more than two years ago sorts below the same skill used
+// recently. Matches the RECENT_MONTHS threshold evidence scoring already uses.
+const STALE_MONTHS = 24;
+
+export interface SignalsInput {
+  mustHave: Skill[];
+  metrics: WorkHistoryMetrics;
+  requiredYears: number | null;
+}
+
+// Named factors, never summed. Each is omitted entirely when its underlying
+// value does not exist, so an absent signal means "not measurable", not "zero".
+export function buildSignals(input: SignalsInput): CompetitivenessSignal[] {
+  const { mustHave, metrics, requiredYears } = input;
+  const signals: CompetitivenessSignal[] = [];
+
+  if (metrics.total_experience_months > 0) {
+    signals.push({
+      key: "total_experience",
+      label: "Total dated experience",
+      value: monthsLabel(metrics.total_experience_months),
+      detail:
+        requiredYears !== null
+          ? `The posting asks for ${requiredYears} year${requiredYears === 1 ? "" : "s"}. Length of experience is the most common thing a recruiter sorts on.`
+          : "The posting states no year requirement, but length of experience is still the most common thing a recruiter sorts on.",
+    });
+  }
+
+  const stale = mustHave.filter(
+    (s) => typeof s.last_used_months_ago === "number" && s.last_used_months_ago > STALE_MONTHS
+  );
+  if (stale.length > 0) {
+    signals.push({
+      key: "skill_recency",
+      label: "Required skills last used over 2 years ago",
+      value: String(stale.length),
+      detail: `${stale.slice(0, 3).map((s) => s.name).join(", ")} — a stale skill sorts below the same skill used recently.`,
+    });
+  }
+
+  if (metrics.avg_tenure_months !== null) {
+    signals.push({
+      key: "avg_tenure",
+      label: "Average time per role",
+      value: monthsLabel(metrics.avg_tenure_months),
+      detail: "Short average tenure is a common stability screen.",
+    });
+  }
+
+  if (metrics.gap_months.length > 0) {
+    signals.push({
+      key: "employment_gaps",
+      label: "Employment gaps over 6 months",
+      value: String(metrics.gap_months.length),
+      detail: `The longest is ${monthsLabel(Math.max(...metrics.gap_months))}. Gaps get flagged often; one line explaining it usually settles the question.`,
+    });
+  }
+
+  const unevidenced = mustHave.filter((s) => s.strength === "weak");
+  if (unevidenced.length > 0) {
+    signals.push({
+      key: "unevidenced_skills",
+      label: "Required skills listed but not evidenced",
+      value: String(unevidenced.length),
+      detail: `${unevidenced.slice(0, 3).map((s) => s.name).join(", ")} appear in a list with no dated role behind them — that reads as keyword stuffing.`,
+    });
+  }
+
+  return signals;
+}
+
+export function firstRequiredYears(requirements: JdRequirement[]): number | null {
+  for (const r of requirements) {
+    if (r.type !== "years_experience") continue;
+    const years = requiredYears(r.value);
+    if (years !== null) return years;
+  }
+  return null;
+}
+
+// Replaces the verdict that used to be derived from overall_ats_score. It is
+// derived from the gates instead, so it cannot outlive the deleted score.
+export function deriveFunnelVerdict(funnel: FunnelResult): ExecutiveSummary["verdict"] {
+  const { parse, knockout, retrieve } = funnel;
+  if (knockout.verdict === "fail") return "critical";
+  const majorityMissed = retrieve.total > 0 && retrieve.surfaced * 2 < retrieve.total;
+  if (parse.verdict === "likely_breaks" || majorityMissed) return "needs_work";
+  if (parse.verdict === "risky" || knockout.verdict === "unverifiable" || retrieve.misses.length > 0) {
+    return "moderate";
+  }
+  return "strong";
+}
+
+export interface FunnelInput {
+  structured: StructuredResume;
+  audit: FormattingAudit;
+  resumeText: string;
+  requirements: JdRequirement[];
+  mustHave: Skill[];
+  metrics: WorkHistoryMetrics;
+  hasDatedRoles: boolean;
+}
+
+export function buildFunnel(input: FunnelInput): FunnelResult {
+  return {
+    parse: evaluateParseGate(input.structured, input.audit),
+    knockout: evaluateKnockoutGate(input.requirements, {
+      structured: input.structured,
+      resumeText: input.resumeText,
+      totalExperienceMonths: input.metrics.total_experience_months,
+      hasDatedRoles: input.hasDatedRoles,
+    }),
+    retrieve: evaluateRetrieveGate(
+      input.mustHave.map((s) => s.name),
+      input.resumeText
+    ),
+    signals: buildSignals({
+      mustHave: input.mustHave,
+      metrics: input.metrics,
+      requiredYears: firstRequiredYears(input.requirements),
+    }),
   };
 }

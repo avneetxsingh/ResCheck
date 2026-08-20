@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { evaluateParseGate, evaluateKnockoutGate, normalizeRequirementType, buildRetrievalQueries, evaluateRetrieveGate } from "@/lib/funnel";
+import { evaluateParseGate, evaluateKnockoutGate, normalizeRequirementType, buildRetrievalQueries, evaluateRetrieveGate, buildSignals, deriveFunnelVerdict, buildFunnel, firstRequiredYears } from "@/lib/funnel";
 import type { FormattingAudit } from "@/types/analysis";
 import type { JdRequirement } from "@/types/analysis";
+import type { Skill, FunnelResult } from "@/types/analysis";
 import type { StructuredResume } from "@/lib/ats-extract";
 
 const CLEAN_AUDIT: FormattingAudit = {
@@ -302,5 +303,140 @@ describe("evaluateRetrieveGate", () => {
   it("no must-have skills yields an empty, non-throwing gate", () => {
     const gate = evaluateRetrieveGate([], RESUME);
     expect(gate).toEqual({ queries: [], surfaced: 0, total: 0, misses: [] });
+  });
+});
+
+const NO_METRICS = {
+  total_experience_months: 0,
+  last_used_months_ago: null,
+  avg_tenure_months: null,
+  gap_months: [] as number[],
+};
+
+const mkSkill = (name: string, over: Partial<Skill> = {}): Skill => ({
+  name, present_in_resume: true, category: "technical", match_strength: "exact", ...over,
+});
+
+describe("buildSignals", () => {
+  it("reports total experience against the posting's requirement", () => {
+    const s = buildSignals({
+      mustHave: [], requiredYears: 5,
+      metrics: { ...NO_METRICS, total_experience_months: 40 },
+    });
+    const total = s.find((x) => x.key === "total_experience");
+    expect(total?.value).toBe("3y 4m");
+    expect(total?.detail).toContain("5 years");
+  });
+
+  it("omits total experience when nothing is dated", () => {
+    expect(buildSignals({ mustHave: [], requiredYears: 5, metrics: NO_METRICS })
+      .some((x) => x.key === "total_experience")).toBe(false);
+  });
+
+  it("flags must-have skills last used over two years ago", () => {
+    const s = buildSignals({
+      mustHave: [mkSkill("Perl", { last_used_months_ago: 40 }), mkSkill("React", { last_used_months_ago: 2 })],
+      requiredYears: null, metrics: NO_METRICS,
+    });
+    const stale = s.find((x) => x.key === "skill_recency");
+    expect(stale?.value).toBe("1");
+    expect(stale?.detail).toContain("Perl");
+  });
+
+  it("surfaces gaps only when work-history reported them", () => {
+    expect(buildSignals({ mustHave: [], requiredYears: null, metrics: NO_METRICS })
+      .some((x) => x.key === "employment_gaps")).toBe(false);
+    const s = buildSignals({
+      mustHave: [], requiredYears: null,
+      metrics: { ...NO_METRICS, gap_months: [8, 14] },
+    });
+    const gaps = s.find((x) => x.key === "employment_gaps");
+    expect(gaps?.value).toBe("2");
+    expect(gaps?.detail).toContain("1y 2m");
+  });
+
+  it("counts weak-tier must-haves as unevidenced", () => {
+    const s = buildSignals({
+      mustHave: [mkSkill("Go", { strength: "weak" }), mkSkill("React", { strength: "strong" })],
+      requiredYears: null, metrics: NO_METRICS,
+    });
+    expect(s.find((x) => x.key === "unevidenced_skills")?.value).toBe("1");
+  });
+
+  it("never emits a combined score", () => {
+    const s = buildSignals({
+      mustHave: [mkSkill("Go", { strength: "weak" })],
+      requiredYears: 5,
+      metrics: { total_experience_months: 40, last_used_months_ago: 2, avg_tenure_months: 20, gap_months: [8] },
+    });
+    expect(s.every((x) => typeof x.value === "string")).toBe(true);
+    expect(s.some((x) => x.key === ("overall" as never))).toBe(false);
+  });
+});
+
+describe("firstRequiredYears", () => {
+  it("reads the first years_experience requirement", () => {
+    expect(firstRequiredYears([req("degree", "Bachelor's"), req("years_experience", "5+ years")])).toBe(5);
+  });
+
+  it("is null when the posting states none", () => {
+    expect(firstRequiredYears([req("degree", "Bachelor's")])).toBeNull();
+  });
+});
+
+describe("deriveFunnelVerdict", () => {
+  const funnel = (over: Partial<FunnelResult>): FunnelResult => ({
+    parse: { verdict: "clean", reasons: [] },
+    knockout: { verdict: "pass", stated: true, checks: [] },
+    retrieve: { queries: [], surfaced: 4, total: 4, misses: [] },
+    signals: [],
+    ...over,
+  });
+
+  it("all three gates clear is strong", () => {
+    expect(deriveFunnelVerdict(funnel({}))).toBe("strong");
+  });
+
+  it("a failed required knockout is critical", () => {
+    expect(deriveFunnelVerdict(funnel({ knockout: { verdict: "fail", stated: true, checks: [] } }))).toBe("critical");
+  });
+
+  it("a parse that likely breaks is needs_work", () => {
+    expect(deriveFunnelVerdict(funnel({ parse: { verdict: "likely_breaks", reasons: [] } }))).toBe("needs_work");
+  });
+
+  it("missing a majority of searches is needs_work", () => {
+    expect(deriveFunnelVerdict(funnel({
+      retrieve: { queries: [], surfaced: 1, total: 4, misses: ["a", "b", "c"] },
+    }))).toBe("needs_work");
+  });
+
+  it("a partially clear funnel is moderate", () => {
+    expect(deriveFunnelVerdict(funnel({ parse: { verdict: "risky", reasons: [] } }))).toBe("moderate");
+    expect(deriveFunnelVerdict(funnel({
+      retrieve: { queries: [], surfaced: 3, total: 4, misses: ["a"] },
+    }))).toBe("moderate");
+    expect(deriveFunnelVerdict(funnel({
+      knockout: { verdict: "unverifiable", stated: true, checks: [] },
+    }))).toBe("moderate");
+  });
+});
+
+describe("buildFunnel", () => {
+  it("assembles all three gates and the signals from one input", () => {
+    const out = buildFunnel({
+      structured: withEducation(["B.S. Computer Science, State University"]),
+      audit: CLEAN_AUDIT,
+      resumeText: "Senior Engineer at Acme. Built with React and SQL. B.S. Computer Science",
+      requirements: [req("degree", "Bachelor's degree"), req("years_experience", "5")],
+      mustHave: [mkSkill("React"), mkSkill("SQL")],
+      metrics: { ...NO_METRICS, total_experience_months: 72, avg_tenure_months: 24 },
+      hasDatedRoles: true,
+    });
+    expect(out.parse.verdict).toBe("clean");
+    expect(out.knockout.verdict).toBe("pass");
+    expect(out.retrieve.misses).toEqual([]);
+    expect(out.signals.map((s) => s.key)).toContain("total_experience");
+    expect(deriveFunnelVerdict(out)).toBe("strong");
   });
 });
