@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { useSettings } from "@/hooks/useSettings";
+import type { AppSettings } from "@/hooks/useSettings";
 import { PROVIDER_INFO as PROVIDERS, PROVIDER_IDS } from "@/lib/providers/catalog";
 import type { ProviderId } from "@/lib/providers/catalog";
 import { cn } from "@/lib/utils";
@@ -15,11 +15,15 @@ import { cn } from "@/lib/utils";
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  settings: AppSettings;
+  saveSettings: (updated: Partial<AppSettings>) => void;
+  hydrated: boolean;
+  defaults: AppSettings;
 }
 
-export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
-  const { settings, saveSettings, hydrated, defaults } = useSettings();
-
+export function SettingsDialog({
+  open, onOpenChange, settings, saveSettings, hydrated, defaults,
+}: SettingsDialogProps) {
   const [provider, setProvider] = useState<ProviderId>(defaults.provider);
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");

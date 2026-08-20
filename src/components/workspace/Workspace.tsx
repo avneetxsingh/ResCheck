@@ -12,7 +12,10 @@ import { SettingsDialog } from "./SettingsDialog";
 import { ResultsContainer } from "@/components/results/ResultsContainer";
 
 export function Workspace() {
-  const { apiKey, hydrated } = useSettings();
+  // Single owner: useSettings keeps its state in useState, so a second call
+  // site would hold an independent copy and a key saved in the dialog would
+  // never reach the rail's "no API key" check.
+  const { apiKey, hydrated, settings, saveSettings, defaults } = useSettings();
   const { stage, progress, result, error, warnings, analyze, reset } = useAnalysis(apiKey);
 
   const [file, setFile] = useState<File | null>(null);
@@ -101,7 +104,14 @@ export function Workspace() {
         </div>
       )}
 
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        settings={settings}
+        saveSettings={saveSettings}
+        hydrated={hydrated}
+        defaults={defaults}
+      />
     </div>
   );
 }
