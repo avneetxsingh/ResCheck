@@ -60,14 +60,18 @@ export function normalizeRequirementType(raw: string): RequirementType | null {
 // precision the funnel exists to remove, so the answer is always the same one.
 const NEVER_VERIFIABLE: RequirementType[] = ["work_authorization", "location"];
 
-// The model files an eligibility or location condition under other declared
-// types too (normalizeRequirementType maps "license" -> certification), so
-// NEVER_VERIFIABLE cannot rely on r.type alone — it must also recognize the
-// condition from its own wording. A work-eligibility "fail" produced by this
-// gap is exactly what the honesty requirement bans.
+// A condition the application form asks and a resume never states. Matching
+// must be phrase-level: a bare stem match turned "Bachelor's degree in Remote
+// Sensing" into a location condition and skipped the degree check entirely —
+// every alternative below is anchored to a phrase that makes it an actual
+// hiring condition, not just a word that also shows up in unrelated text.
 const ELIGIBILITY_OR_LOCATION_PATTERN =
-  /authoriz|authoris|visa|sponsor|citizen|work permit|eligib|relocat|onsite|on-site|hybrid|remote/i;
-const LOCATION_ONLY_PATTERN = /relocat|onsite|on-site|hybrid|remote/i;
+  /\b(work(ing)?\s+(authoriz|authoris|eligib|permit)|authoriz\w*\s+to\s+work|legally\s+authoriz|right\s+to\s+work|work\s+visa|visa\s+(status|sponsorship|required)|sponsorship|require\w*\s+sponsorship|citizenship|u\.?s\.?\s+citizen|security\s+clearance|willing(ness)?\s+to\s+relocate|able\s+to\s+relocate|relocation\s+required|must\s+(be\s+)?(located|based|reside)|on-?site\s+\d|days?\s+(a|per)\s+week\s+in|hybrid\s+(role|schedule|work|position|—|-)|fully\s+remote|remote\s+(role|position|work\s+arrangement))\b/i;
+// The location-flavored subset of the pattern above — used only to pick which
+// detail string to show once the guard has already fired, not to decide
+// whether it fires (that's the combined pattern).
+const LOCATION_ONLY_PATTERN =
+  /\b(willing(ness)?\s+to\s+relocate|able\s+to\s+relocate|relocation\s+required|must\s+(be\s+)?(located|based|reside)|on-?site\s+\d|days?\s+(a|per)\s+week\s+in|hybrid\s+(role|schedule|work|position|—|-)|fully\s+remote|remote\s+(role|position|work\s+arrangement))\b/i;
 
 const WORK_AUTH_DETAIL =
   "A resume doesn't state work authorization, and ResCheck never sees the application form — the form will ask this, so check it yourself.";
@@ -75,10 +79,17 @@ const LOCATION_DETAIL =
   "A resume doesn't state location or willingness to relocate — the application form will ask, so check it yourself.";
 
 // Returns which never-verifiable copy applies, or null when the requirement
-// is neither. LOCATION_ONLY_PATTERN decides only which detail string to show
-// when the type itself doesn't say — the trigger is the combined pattern.
+// is neither. The value-text guard runs ONLY for "certification": degree and
+// years_experience have their own evidence-based branches below and must
+// never be pre-empted by a value-text match (a shortfall or a match there is
+// real evidence; a value-text guess is not). work_authorization and location
+// are already handled by the r.type check above, so the guard is moot for
+// them. certification is where the model actually misfiles these —
+// normalizeRequirementType maps "license" -> certification — so that's the
+// one type this guard needs to protect.
 function neverVerifiableType(r: JdRequirement): "work_authorization" | "location" | null {
   if (NEVER_VERIFIABLE.includes(r.type)) return r.type as "work_authorization" | "location";
+  if (r.type !== "certification") return null;
   if (!ELIGIBILITY_OR_LOCATION_PATTERN.test(r.value)) return null;
   return LOCATION_ONLY_PATTERN.test(r.value) ? "location" : "work_authorization";
 }

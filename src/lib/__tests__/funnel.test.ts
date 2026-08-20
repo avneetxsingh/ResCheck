@@ -270,13 +270,32 @@ describe("evaluateKnockoutGate — the honesty guarantee", () => {
   // normalizeRequirementType maps "license"/"licence" onto "certification", so
   // the model can file a work-eligibility condition under a type the honesty
   // guarantee doesn't recognize by name alone — it must recognize the wording.
-  it("an eligibility condition filed under an unrelated type is still unverifiable", () => {
+  it("an eligibility condition filed under an unrelated type is still caught", () => {
     const gate = evaluateKnockoutGate(
       [req("certification", "authorized to work in the US")],
       CTX
     );
     expect(gate.checks[0].verdict).toBe("unverifiable");
     expect(gate.checks[0].verdict).not.toBe("fail");
+  });
+
+  // The value-text guard is phrase-anchored, not stem-anchored — a bare "remote"
+  // or "citizen" substring must not pre-empt a real check on an unrelated type.
+  it("a degree requirement naming a field that reads like a location is still checked", () => {
+    const gate = evaluateKnockoutGate([req("degree", "Bachelor's degree in Remote Sensing")], CTX);
+    expect(gate.checks[0].verdict).not.toBe("unverifiable");
+  });
+
+  it("a certification whose name contains an eligibility word is still checked", () => {
+    const ctx = { ...CTX, resumeText: `${CTX.resumeText}\nCitizen Developer Certification, 2024` };
+    expect(
+      evaluateKnockoutGate([req("certification", "Citizen Developer Certification")], ctx).checks[0].verdict
+    ).toBe("pass");
+  });
+
+  it("a hybrid-cloud certification is not mistaken for a hybrid work arrangement", () => {
+    const gate = evaluateKnockoutGate([req("certification", "Certified Hybrid Cloud Professional")], CTX);
+    expect(gate.checks[0].verdict).toBe("fail");
   });
 });
 
