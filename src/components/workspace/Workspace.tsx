@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useTheme } from "next-themes";
+import { Settings, Sun, Moon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useSettings } from "@/hooks/useSettings";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { InputRail } from "./InputRail";
 import { RunSummary } from "./RunSummary";
+import { SettingsDialog } from "./SettingsDialog";
 import { ResultsContainer } from "@/components/results/ResultsContainer";
 
 export function Workspace() {
@@ -17,6 +21,13 @@ export function Workspace() {
   // The rail collapses on its own once a result lands, but the user can
   // reopen it; that intent has to outlive the next render, so it is state.
   const [railOpen, setRailOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // The theme toggle lived in Navbar, which Task 7 deletes. It is the only
+  // toggle in the app, so the workspace header must carry it or the user is
+  // stranded in whatever theme they last had.
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const isRunning = stage === "parsing" || stage === "analyzing";
   const hasKey = apiKey.length > 10;
@@ -32,6 +43,30 @@ export function Workspace() {
 
   return (
     <div className="mx-auto w-full max-w-5xl">
+      <header className="flex items-center justify-between px-5 py-3 border-b border-border">
+        <span className="font-mono text-sm font-semibold tracking-tight">ResCheck</span>
+        <div className="flex items-center gap-1">
+          {mounted && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+              aria-label="Toggle theme"
+            >
+              {resolvedTheme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </Button>
+        </div>
+      </header>
+
       {showRail ? (
         <InputRail
           jobDescription={jobDescription}
@@ -50,7 +85,7 @@ export function Workspace() {
           warnings={warnings}
           error={error}
           onSubmit={handleSubmit}
-          onOpenSettings={() => {}}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
       ) : (
         <RunSummary
@@ -65,6 +100,8 @@ export function Workspace() {
           <ResultsContainer result={result} onReset={() => { reset(); setRailOpen(true); }} />
         </div>
       )}
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }
