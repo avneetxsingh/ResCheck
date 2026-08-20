@@ -12,6 +12,7 @@ import { FormattingAuditPanel } from "./FormattingAuditPanel";
 import { SkillsGapPanel } from "./SkillsGapPanel";
 import { SummaryPanel } from "./SummaryPanel";
 import { ExportButton } from "./ExportButton";
+import { FunnelPanel } from "./FunnelPanel";
 import type { AnalysisResult } from "@/types/analysis";
 
 interface ResultsContainerProps {
@@ -41,7 +42,9 @@ function scoreColorClass(score: number) {
 export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
-  const overall = result.scorecard.overall_ats_score.score;
+  // Absent on every result written after the funnel shipped; present forever on
+  // the ones written before it.
+  const legacyOverall = result.scorecard.overall_ats_score?.score;
   const verdict = VERDICT_LABELS[result.summary.verdict] ?? VERDICT_LABELS.moderate;
 
   return (
@@ -56,15 +59,31 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <div className="flex items-baseline gap-3">
-            <span className={cn("text-6xl font-light tracking-tight tabular-nums", scoreColorClass(overall))}>
-              {overall}
-            </span>
-            <span className={cn("text-lg font-medium", verdict.className)}>{verdict.label}</span>
+            {legacyOverall !== undefined ? (
+              <span className={cn("text-6xl font-light tracking-tight tabular-nums", scoreColorClass(legacyOverall))}>
+                {legacyOverall}
+              </span>
+            ) : (
+              <span className={cn("text-4xl font-light tracking-tight", verdict.className)}>
+                {verdict.label}
+              </span>
+            )}
+            {legacyOverall !== undefined && (
+              <span className={cn("text-lg font-medium", verdict.className)}>{verdict.label}</span>
+            )}
           </div>
           <p className="text-sm text-muted-foreground mt-2 flex items-center gap-2 flex-wrap">
             <span>{result.metadata.total_errors_found} issues</span>
             <span aria-hidden>·</span>
-            <span>{result.skills_gap.overall_match_percentage}% skill match</span>
+            {result.funnel ? (
+              <span>
+                surfaces for {result.funnel.retrieve.surfaced} of {result.funnel.retrieve.total} searches
+              </span>
+            ) : (
+              typeof result.skills_gap.overall_match_percentage === "number" && (
+                <span>{result.skills_gap.overall_match_percentage}% skill match</span>
+              )
+            )}
             {result.metadata.jd_quality && (
               <>
                 <span aria-hidden>·</span>
@@ -125,7 +144,10 @@ export function ResultsContainer({ result, onReset }: ResultsContainerProps) {
         </TabsList>
 
         <TabsContent value="overview" className="mt-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">
-          <ScorecardPanel scorecard={result.scorecard} />
+          <div className="space-y-8">
+            {result.funnel && <FunnelPanel funnel={result.funnel} />}
+            <ScorecardPanel scorecard={result.scorecard} />
+          </div>
         </TabsContent>
 
         <TabsContent value="errors" className="mt-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150">

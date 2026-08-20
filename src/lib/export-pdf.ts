@@ -35,7 +35,12 @@ export async function exportResultsPdf(
     "en-US",
     { year: "numeric", month: "long", day: "numeric" }
   );
-  pdf.text(`Generated: ${date}  |  Overall Score: ${result.scorecard.overall_ats_score.score}/100`, pageWidth - 10, 12, { align: "right" });
+  const legacyOverall = result.scorecard.overall_ats_score?.score;
+  const headline =
+    legacyOverall !== undefined
+      ? `Overall Score: ${legacyOverall}/100`
+      : `Verdict: ${result.summary.verdict.replace(/_/g, " ")}`;
+  pdf.text(`Generated: ${date}  |  ${headline}`, pageWidth - 10, 12, { align: "right" });
 
   // Image content
   const contentY = 22;

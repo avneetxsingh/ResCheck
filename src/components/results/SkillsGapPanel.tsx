@@ -89,11 +89,9 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
     <div className="space-y-6">
       {/* Match score */}
       <div className="flex items-center gap-6 p-6 rounded-xl border border-border/50">
-        <ScoreRing
-          score={skillsGap.overall_match_percentage}
-          size="md"
-          label="Skill Match"
-        />
+        {typeof skillsGap.overall_match_percentage === "number" && (
+          <ScoreRing score={skillsGap.overall_match_percentage} size="md" label="Skill Match" />
+        )}
         <div>
           <p className="font-medium">Skill match</p>
           <p className="text-sm text-muted-foreground mt-1">

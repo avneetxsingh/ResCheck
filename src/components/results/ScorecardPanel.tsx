@@ -13,11 +13,13 @@ interface ScorecardPanelProps {
   scorecard: Scorecard;
 }
 
+// The writing three, then the legacy metrics — which exist only on history
+// entries written before the funnel and are skipped when absent.
 const METRICS = [
-  "skills_match_score",
+  "impact_score",
   "grammar_score",
   "formatting_score",
-  "impact_score",
+  "skills_match_score",
   "keyword_density_score",
 ] as const;
 
@@ -36,14 +38,21 @@ function barColorClass(score: number) {
 export function ScorecardPanel({ scorecard }: ScorecardPanelProps) {
   return (
     <div className="space-y-6">
-      <div className="space-y-1.5">
+      {scorecard.overall_ats_score ? (
+        <div className="space-y-1.5">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {scorecard.overall_ats_score.rationale}
+          </p>
+          <p className="text-sm font-medium text-primary">
+            {scorecard.overall_ats_score.improvement_tip}
+          </p>
+        </div>
+      ) : (
         <p className="text-sm text-muted-foreground leading-relaxed">
-          {scorecard.overall_ats_score.rationale}
+          Writing quality — real measurements of the document, and not a screening outcome. No
+          ATS rejects a resume over these; a human reading it will notice them.
         </p>
-        <p className="text-sm font-medium text-primary">
-          {scorecard.overall_ats_score.improvement_tip}
-        </p>
-      </div>
+      )}
 
       <div className="rounded-xl border border-border/50 divide-y divide-border/50 overflow-hidden">
         {METRICS.map((key) => {

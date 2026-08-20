@@ -48,9 +48,11 @@ export function HistoryCard({ entry, onRemove }: HistoryCardProps) {
             {VERDICT_LABELS[verdict]}
           </p>
         </div>
-        <span className={cn("text-2xl font-light tabular-nums shrink-0", scoreColorClass(entry.overall_score))}>
-          {entry.overall_score}
-        </span>
+        {typeof entry.overall_score === "number" && (
+          <span className={cn("text-2xl font-light tabular-nums shrink-0", scoreColorClass(entry.overall_score))}>
+            {entry.overall_score}
+          </span>
+        )}
         <div className="flex items-center gap-1 shrink-0">
           <Button
             type="button"

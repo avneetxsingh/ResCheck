@@ -220,7 +220,7 @@ export function useAnalysis(apiKey: string) {
           id: `analysis-${Date.now()}`,
           created_at: enriched.metadata.analyzed_at,
           job_title_hint: jobDescription.slice(0, 80),
-          overall_score: enriched.scorecard.overall_ats_score.score,
+          overall_score: enriched.scorecard.overall_ats_score?.score,
           result: enriched,
         };
         addEntry(entry);
