@@ -9,7 +9,7 @@ import { useAnalysis } from "@/hooks/useAnalysis";
 import { InputRail } from "./InputRail";
 import { RunSummary } from "./RunSummary";
 import { SettingsDialog } from "./SettingsDialog";
-import { ResultsContainer } from "@/components/results/ResultsContainer";
+import { ResultsView } from "@/components/results/ResultsView";
 
 export function Workspace() {
   // Single owner: useSettings keeps its state in useState, so a second call
@@ -100,7 +100,7 @@ export function Workspace() {
 
       {result && (
         <div className="p-5">
-          <ResultsContainer result={result} onReset={() => { reset(); setRailOpen(true); }} />
+          <ResultsView result={result} onReset={() => { reset(); setRailOpen(true); }} />
         </div>
       )}
 
