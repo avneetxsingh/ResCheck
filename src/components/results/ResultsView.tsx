@@ -106,8 +106,8 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
             </FindingRow>
           ))}
           <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-            These are not a pass and not a failure. ResCheck never sees the application
-            form, so they are yours to confirm.
+            A resume never states work authorization or location, and ResCheck never sees the
+            application form. Those are yours to confirm — not a pass and not a failure.
           </p>
         </Section>
       )}
@@ -120,9 +120,8 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
             </FindingRow>
           ))}
           <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-            {funnel.retrieve.surfaced === 1
-              ? `Your résumé surfaces for 1 of the ${funnel.retrieve.total} searches a recruiter would plausibly run.`
-              : `Your résumé surfaces for ${funnel.retrieve.surfaced} of the ${funnel.retrieve.total} searches a recruiter would plausibly run.`}
+            Your résumé surfaces for {funnel.retrieve.surfaced} of the {funnel.retrieve.total}{" "}
+            {funnel.retrieve.total === 1 ? "search" : "searches"} a recruiter would plausibly run.
           </p>
         </Section>
       )}
