@@ -101,9 +101,13 @@ export function Workspace() {
         />
       ) : (
         <RunSummary
-          jobTitle={jobDescription.slice(0, 80) || "Untitled run"}
-          fileName={file?.name ?? "résumé.pdf"}
-          onReopen={() => setRailOpen(true)}
+          jobTitle={viewing ? viewing.job_title_hint : (jobDescription.slice(0, 80) || "Untitled run")}
+          fileName={
+            viewing
+              ? new Date(viewing.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+              : (file?.name ?? "résumé.pdf")
+          }
+          onReopen={() => { setViewingId(null); setRailOpen(true); }}
         />
       )}
 

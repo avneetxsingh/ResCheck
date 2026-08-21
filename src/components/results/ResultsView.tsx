@@ -35,13 +35,17 @@ const VERDICT_LABEL: Record<string, string> = {
 };
 
 export function ResultsView({ result, onReset }: ResultsViewProps) {
+  // Hooks must run in the same order on every render, so this stays above the
+  // legacy early return — switching between a pre-funnel and a funnel-shaped
+  // past run reuses this same mounted component.
+  const printRef = useRef<HTMLDivElement>(null);
+
   // Pre-funnel entries have no gates to rank. They get their own view rather
   // than an empty shell where the gates would be.
   if (!result.funnel) {
     return <LegacyResultsView result={result} onReset={onReset} />;
   }
 
-  const printRef = useRef<HTMLDivElement>(null);
   const funnel = result.funnel;
 
   const blocking = funnel?.knockout.checks.filter((c) => c.required && c.verdict === "fail") ?? [];
