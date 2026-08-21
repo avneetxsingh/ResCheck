@@ -6,9 +6,11 @@ import { Settings, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/hooks/useSettings";
 import { useAnalysis } from "@/hooks/useAnalysis";
+import { useHistory } from "@/hooks/useHistory";
 import { InputRail } from "./InputRail";
 import { RunSummary } from "./RunSummary";
 import { SettingsDialog } from "./SettingsDialog";
+import { PastRuns } from "./PastRuns";
 import { ResultsView } from "@/components/results/ResultsView";
 
 export function Workspace() {
@@ -17,6 +19,12 @@ export function Workspace() {
   // never reach the rail's "no API key" check.
   const { apiKey, hydrated, settings, saveSettings, defaults } = useSettings();
   const { stage, progress, result, error, warnings, analyze, reset } = useAnalysis(apiKey);
+  const { history, removeEntry } = useHistory();
+  // null means "show the live result"; an id means a past run is being viewed.
+  const [viewingId, setViewingId] = useState<string | null>(null);
+
+  const viewing = viewingId === null ? null : history.find((e) => e.id === viewingId) ?? null;
+  const shown = viewing?.result ?? result;
 
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -36,9 +44,10 @@ export function Workspace() {
   const hasKey = apiKey.length > 10;
   const canSubmit = hasKey && file !== null && jobDescription.trim().length > 0 && !isRunning;
 
-  const showRail = railOpen || result === null;
+  const showRail = railOpen || (result === null && viewing === null);
 
   const handleSubmit = async () => {
+    setViewingId(null);
     if (!file) return;
     await analyze(file, jobDescription);
     setRailOpen(false);
@@ -98,11 +107,21 @@ export function Workspace() {
         />
       )}
 
-      {result && (
+      {shown && (
         <div className="p-5">
-          <ResultsView result={result} onReset={() => { reset(); setRailOpen(true); }} />
+          <ResultsView
+            result={shown}
+            onReset={() => { reset(); setViewingId(null); setRailOpen(true); }}
+          />
         </div>
       )}
+
+      <PastRuns
+        entries={history}
+        activeId={viewingId}
+        onSelect={(id) => { setViewingId(id); setRailOpen(false); }}
+        onRemove={removeEntry}
+      />
 
       <SettingsDialog
         open={settingsOpen}

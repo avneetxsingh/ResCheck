@@ -12,6 +12,7 @@ import { FormattingAuditPanel } from "./FormattingAuditPanel";
 import { SkillsGapPanel } from "./SkillsGapPanel";
 import { SummaryPanel } from "./SummaryPanel";
 import { ExportButton } from "./ExportButton";
+import { LegacyResultsView } from "./LegacyResultsView";
 import type { AnalysisResult } from "@/types/analysis";
 
 interface ResultsViewProps {
@@ -34,6 +35,12 @@ const VERDICT_LABEL: Record<string, string> = {
 };
 
 export function ResultsView({ result, onReset }: ResultsViewProps) {
+  // Pre-funnel entries have no gates to rank. They get their own view rather
+  // than an empty shell where the gates would be.
+  if (!result.funnel) {
+    return <LegacyResultsView result={result} onReset={onReset} />;
+  }
+
   const printRef = useRef<HTMLDivElement>(null);
   const funnel = result.funnel;
 
