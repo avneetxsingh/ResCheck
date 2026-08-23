@@ -17,16 +17,16 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "ResCheck — does your resume pass?",
   description:
-    "Check a resume against a job description: the score an ATS would give it, the lines that hurt it, and the skills it's missing. Bring your own Groq key; nothing is stored.",
+    "Check a résumé against a job posting: whether it parses, whether you meet the stated requirements, and whether a recruiter's search would find you. Bring your own API key; nothing is stored.",
   openGraph: {
     title: "ResCheck",
-    description: "Check a resume against a job description before you apply.",
+    description: "Check a résumé against a job posting before you apply.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "ResCheck",
-    description: "Check a resume against a job description before you apply.",
+    description: "Check a résumé against a job posting before you apply.",
   },
 };
 
