@@ -4,13 +4,14 @@ import { RotateCcw } from "lucide-react";
 
 interface RunSummaryProps {
   jobTitle: string;
-  fileName: string;
+  // Not always a file name — a viewed past run shows its date here instead.
+  detail: string;
   onReopen: () => void;
 }
 
 // The collapsed rail. It is a real button rather than a div-with-handlers
 // because the whole strip does exactly one thing: reopen the editor.
-export function RunSummary({ jobTitle, fileName, onReopen }: RunSummaryProps) {
+export function RunSummary({ jobTitle, detail, onReopen }: RunSummaryProps) {
   return (
     <button
       type="button"
@@ -19,7 +20,7 @@ export function RunSummary({ jobTitle, fileName, onReopen }: RunSummaryProps) {
     >
       <span className="text-sm truncate min-w-0 flex-1">{jobTitle}</span>
       <span className="font-mono text-xs text-muted-foreground truncate max-w-[14rem]">
-        {fileName}
+        {detail}
       </span>
       <RotateCcw className="w-3.5 h-3.5 text-muted-foreground shrink-0" aria-hidden />
       <span className="sr-only">Edit inputs and run again</span>

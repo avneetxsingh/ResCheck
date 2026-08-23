@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useHistory } from "./useHistory";
-import { useSettings } from "./useSettings";
 import type { AnalysisResult, RawAnalysisResult, LineError } from "@/types/analysis";
 import type { HistoryEntry } from "@/types/history";
 import type { ApiError } from "@/types/api";
+import type { ProviderId } from "@/lib/providers/catalog";
 
 export type AnalysisStage =
   | "idle"
@@ -71,14 +70,25 @@ function enrichResult(raw: RawAnalysisResult): AnalysisResult {
   };
 }
 
-export function useAnalysis(apiKey: string) {
+// apiKey, provider, and model arrive as parameters rather than through a
+// local useSettings() call. useSettings keeps its state in per-instance
+// useState with no cross-instance sync; a second instance here would hold
+// its own copy that drifts from the one the settings dialog writes through
+// the moment the dialog stopped unmounting the tree (workspace restructure).
+// Likewise onComplete replaces an internal useHistory() — that hook's
+// addEntry would write to localStorage from an instance the Past Runs list
+// never reads, so a finished run wouldn't appear until reload.
+export function useAnalysis(
+  apiKey: string,
+  provider: ProviderId,
+  model: string,
+  onComplete?: (entry: HistoryEntry) => void
+) {
   const [stage, setStage] = useState<AnalysisStage>("idle");
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const { addEntry } = useHistory();
-  const { settings } = useSettings();
 
   // Refs so we can clean up across renders without stale closures
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -147,8 +157,8 @@ export function useAnalysis(apiKey: string) {
           body: JSON.stringify({
             resume_text: resumeText,
             job_description: jobDescription,
-            provider: settings.provider,
-            model: settings.model,
+            provider,
+            model,
           }),
           signal: controller.signal,
         });
@@ -223,7 +233,7 @@ export function useAnalysis(apiKey: string) {
           overall_score: enriched.scorecard.overall_ats_score?.score,
           result: enriched,
         };
-        addEntry(entry);
+        onComplete?.(entry);
       } catch (err) {
         // AbortError = intentional cancel (new analysis started or component unmounted)
         if (err instanceof Error && err.name === "AbortError") return;
@@ -236,7 +246,7 @@ export function useAnalysis(apiKey: string) {
         );
       }
     },
-    [apiKey, addEntry, settings.provider, settings.model]
+    [apiKey, provider, model, onComplete]
   );
 
   const reset = useCallback(() => {

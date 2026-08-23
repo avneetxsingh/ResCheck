@@ -18,8 +18,13 @@ export function Workspace() {
   // site would hold an independent copy and a key saved in the dialog would
   // never reach the rail's "no API key" check.
   const { apiKey, hydrated, settings, saveSettings, defaults } = useSettings();
-  const { stage, progress, result, error, warnings, analyze, reset } = useAnalysis(apiKey);
-  const { history, removeEntry } = useHistory();
+  const { history, addEntry, removeEntry } = useHistory();
+  const { stage, progress, result, error, warnings, analyze, reset } = useAnalysis(
+    apiKey,
+    settings.provider,
+    settings.model,
+    addEntry
+  );
   // null means "show the live result"; an id means a past run is being viewed.
   const [viewingId, setViewingId] = useState<string | null>(null);
 
@@ -102,7 +107,7 @@ export function Workspace() {
       ) : (
         <RunSummary
           jobTitle={viewing ? viewing.job_title_hint : (jobDescription.slice(0, 80) || "Untitled run")}
-          fileName={
+          detail={
             viewing
               ? new Date(viewing.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
               : (file?.name ?? "résumé.pdf")
@@ -124,7 +129,7 @@ export function Workspace() {
         entries={history}
         activeId={viewingId}
         onSelect={(id) => { setViewingId(id); setRailOpen(false); }}
-        onRemove={removeEntry}
+        onRemove={(id) => { removeEntry(id); if (id === viewingId) setViewingId(null); }}
       />
 
       <SettingsDialog
