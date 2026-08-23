@@ -48,10 +48,11 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
 
   const funnel = result.funnel;
 
-  const blocking = funnel?.knockout.checks.filter((c) => c.required && c.verdict === "fail") ?? [];
-  const checkYourself =
-    funnel?.knockout.checks.filter((c) => c.required && c.verdict === "unverifiable") ?? [];
-  const misses = funnel?.retrieve.misses ?? [];
+  const blocking = funnel.knockout.checks.filter((c) => c.required && c.verdict === "fail");
+  const checkYourself = funnel.knockout.checks.filter(
+    (c) => c.required && c.verdict === "unverifiable"
+  );
+  const misses = funnel.retrieve.misses;
   // A blocked or invisible résumé leads with that, not with twelve writing nits.
   const hasUrgent = blocking.length > 0 || checkYourself.length > 0 || misses.length > 0;
 
@@ -82,11 +83,9 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
         </div>
       </div>
 
-      {funnel && (
-        <div className="pb-2">
-          <GateCells funnel={funnel} />
-        </div>
-      )}
+      <div className="pb-2">
+        <GateCells funnel={funnel} />
+      </div>
 
       {result.warnings && result.warnings.length > 0 && (
         <ul className="space-y-1 py-3">
@@ -97,6 +96,24 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
             </li>
           ))}
         </ul>
+      )}
+
+      {funnel.parse.verdict !== "clean" && funnel.parse.reasons.length > 0 && (
+        <Section
+          key={`${sectionKey}-parse`}
+          title="Won't parse cleanly"
+          count={funnel.parse.reasons.length}
+        >
+          {funnel.parse.reasons.map((r, i) => (
+            <FindingRow
+              key={i}
+              tag="PARSE"
+              tone={funnel.parse.verdict === "likely_breaks" ? "fail" : "warn"}
+            >
+              {r}
+            </FindingRow>
+          ))}
+        </Section>
       )}
 
       {blocking.length > 0 && (
@@ -116,14 +133,18 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
               {c.detail}
             </FindingRow>
           ))}
-          <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-            A resume never states work authorization or location, and ResCheck never sees the
-            application form. Those are yours to confirm — not a pass and not a failure.
-          </p>
+          {checkYourself.some(
+            (c) => c.type === "work_authorization" || c.type === "location"
+          ) && (
+            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              A resume never states work authorization or location, and ResCheck never sees the
+              application form. Those are yours to confirm — not a pass and not a failure.
+            </p>
+          )}
         </Section>
       )}
 
-      {misses.length > 0 && funnel && (
+      {misses.length > 0 && (
         <Section key={`${sectionKey}-not-found`} title="Not found by search" count={misses.length}>
           {misses.map((m, i) => (
             <FindingRow key={i} tag="SRCH" tone="warn">
@@ -143,7 +164,7 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
         </Section>
       )}
 
-      {funnel && funnel.signals.length > 0 && (
+      {funnel.signals.length > 0 && (
         <Section key={`${sectionKey}-how-you-sort`} title="How you sort" count={funnel.signals.length} defaultOpen={!hasUrgent}>
           <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
             Nothing here is a rejection, and these are deliberately not combined into a
