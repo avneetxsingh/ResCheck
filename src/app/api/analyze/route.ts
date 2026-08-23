@@ -10,6 +10,7 @@ import { extractResumeStructure, toAtsExtraction, buildSectionizedText, sectionN
 import { runFormattingAudit } from "@/lib/formatting-audit";
 import { buildSkills, extractBonusSkills, clipJd, sanitizeSkillName, isNegatedInJd } from "@/lib/keyword-match";
 import { computeScores, buildFallbackSummary, AUDIT_KEYS } from "@/lib/scoring";
+import { analyzeLimiter, clientKey } from "@/lib/rate-limit";
 import { segmentRoles, computeWorkHistoryMetrics } from "@/lib/work-history";
 import { buildFunnel, deriveFunnelVerdict, normalizeRequirementType } from "@/lib/funnel";
 import type { ApiError } from "@/types/api";
@@ -254,6 +255,23 @@ async function callStage<T>(opts: {
 
 // ── Route ──────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  // Ahead of the key check, because everything up to the first provider call
+  // is unauthenticated: body parsing, resume-text handling and the whole
+  // deterministic extraction run before a key is ever validated.
+  const rateKey = clientKey(req.headers);
+  if (rateKey) {
+    const { allowed, retryAfterSeconds } = analyzeLimiter.check(rateKey);
+    if (!allowed) {
+      return NextResponse.json<ApiError>(
+        {
+          error: `Too many analyses from this connection. Wait about ${retryAfterSeconds} ${retryAfterSeconds === 1 ? "second" : "seconds"} and try again.`,
+          code: "RATE_LIMITED",
+        },
+        { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
+      );
+    }
+  }
+
   // x-groq-api-key is the pre-abstraction header name. A browser holding a
   // cached bundle keeps working until it reloads.
   const apiKey = req.headers.get("x-provider-api-key") ?? req.headers.get("x-groq-api-key");

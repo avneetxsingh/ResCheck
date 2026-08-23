@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parsePdf } from "@/lib/pdf-parser";
+import { clientKey, parsePdfLimiter } from "@/lib/rate-limit";
 import type { ApiError } from "@/types/api";
 
 export const runtime = "nodejs";
@@ -12,6 +13,23 @@ export const maxDuration = 60;
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
 
 export async function POST(req: NextRequest) {
+  // Before anything expensive: this route is unauthenticated and hands
+  // hostile binary input to a PDF parser in-process, which makes it the
+  // cheapest lever a stranger has on the deployer's compute.
+  const key = clientKey(req.headers);
+  if (key) {
+    const { allowed, retryAfterSeconds } = parsePdfLimiter.check(key);
+    if (!allowed) {
+      return NextResponse.json<ApiError>(
+        {
+          error: `Too many uploads from this connection. Wait about ${retryAfterSeconds} ${retryAfterSeconds === 1 ? "second" : "seconds"} and try again.`,
+          code: "PARSE_FAILED",
+        },
+        { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } }
+      );
+    }
+  }
+
   try {
     const formData = await req.formData();
     const file = formData.get("resume");
