@@ -99,7 +99,7 @@ export function SettingsDialog({
                 type={showKey ? "text" : "password"}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder={active.keyHint}
+                placeholder={`${active.keyPrefix}…`}
                 className="font-mono text-sm"
               />
               <Button
