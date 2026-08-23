@@ -312,6 +312,37 @@ export function sanitizeSkillName(raw: string): string | null {
 
 const NEGATORS = /\b(no|not|without|neither|nor)\b/i;
 
+// Scanning the whole clause head made "Candidates without a strong Python
+// background will not be considered" read as "Python is not required",
+// deleting the posting's hardest requirement from the analysis entirely —
+// the inverse of the truth, and the costly direction of error.
+//
+// Distance alone cannot separate the cases: the false positive above sits
+// three words from the skill, and the genuine "without prior Java exposure"
+// sits two. What actually differs is what the negator attaches to. A negator
+// followed by a quantity or quality word ("a strong", "deep", "extensive")
+// negates a DEGREE of the skill — the candidate still needs it. So a negator
+// only counts when nothing but plain modifiers separate it from the skill.
+const NEGATOR_WINDOW_WORDS = 4;
+
+// Words that may sit between a negator and the skill without changing that
+// the skill itself is what is being negated ("no prior React", "without any
+// direct SQL"). Anything else — an article plus an adjective, a noun — means
+// the negator is governing some other phrase.
+const NEUTRAL_BETWEEN = new Set([
+  "any", "prior", "previous", "direct", "formal", "professional", "real",
+  "hands", "on", "the", "of", "in", "with", "and", "or",
+]);
+
+function negatedImmediatelyBefore(before: string): boolean {
+  const words = before.trim().split(/\s+/).filter(Boolean);
+  const window = words.slice(-NEGATOR_WINDOW_WORDS);
+  const negatorAt = window.findLastIndex((w) => NEGATORS.test(w));
+  if (negatorAt === -1) return false;
+  // Everything between the negator and the skill must be a plain modifier.
+  return window.slice(negatorAt + 1).every((w) => NEUTRAL_BETWEEN.has(w));
+}
+
 export function isNegatedInJd(skill: string, jdText: string): boolean {
   const norm = normalizeSkill(skill);
   if (!norm) return false;
@@ -329,7 +360,7 @@ export function isNegatedInJd(skill: string, jdText: string): boolean {
     if (!hit) continue;
     sawOccurrence = true;
     const before = clauseNorm.slice(0, hit.index);
-    if (!NEGATORS.test(before)) return false;
+    if (!negatedImmediatelyBefore(before)) return false;
   }
   return sawOccurrence;
 }

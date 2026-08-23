@@ -448,7 +448,11 @@ export async function POST(req: NextRequest) {
           `Competitiveness signals: ${funnel.signals.map((s) => `${s.label} = ${s.value}`).join("; ") || "none"}`,
           `Missing must-have skills: ${missingMust.join(", ") || "none"}`,
           `Bonus skills on resume: ${bonusSkills.slice(0, 6).join(", ") || "none"}`,
-          `Writing errors: ${errors.length} (${errors.filter((e) => e.severity === "critical").length} critical)`,
+          // "0 errors" reads as a clean resume; when the audit failed it means
+          // nothing was looked at. AI-3 must not narrate the difference away.
+          errorsOutcome.ok
+            ? `Writing errors: ${errors.length} (${errors.filter((e) => e.severity === "critical").length} critical)`
+            : "Writing audit: DID NOT RUN this time. Say so plainly; do not describe the writing as clean or claim anything about wording.",
           `Top errors: ${errors.slice(0, 5).map((e) => `${e.error_type}: ${e.reason}`).join("; ") || "none"}`,
           `Formatting inconsistencies: ${auditCount}`,
           `Writing scores — impact ${sc.impact_score.score}, grammar ${sc.grammar_score.score}, formatting ${sc.formatting_score.score}`,
@@ -463,6 +467,7 @@ export async function POST(req: NextRequest) {
 
         const fallback = buildFallbackSummary({
           scorecard: scoring.scorecard, verdict, funnel, mustHave, errors, bonusSkills,
+          writingAuditRan: errorsOutcome.ok,
         });
         const summary =
           summaryOutcome.ok && summaryOutcome.data.headline

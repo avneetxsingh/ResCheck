@@ -109,6 +109,11 @@ export interface FallbackInput {
   mustHave: Skill[];
   errors: Omit<LineError, "id">[];
   bonusSkills: string[];
+  // False when the writing-audit stage failed. An empty `errors` array then
+  // means "not measured", not "nothing wrong" — without this the summary
+  // claimed clean grammar and quantified bullets off an audit that never ran.
+  // Optional, defaulting to true, so existing callers keep their meaning.
+  writingAuditRan?: boolean;
 }
 
 // Used when the summary AI stage fails. Every input is deterministic, so the
@@ -116,6 +121,7 @@ export interface FallbackInput {
 // there is no longer an overall score to narrate.
 export function buildFallbackSummary(input: FallbackInput): ExecutiveSummary {
   const { scorecard: sc, verdict, funnel, mustHave, errors, bonusSkills } = input;
+  const auditRan = input.writingAuditRan ?? true;
   const failed = funnel.knockout.checks.filter((c) => c.required && c.verdict === "fail");
   const unverifiable = funnel.knockout.checks.filter((c) => c.required && c.verdict === "unverifiable");
   // Only work_authorization/location are the "form will ask" case — a degree
@@ -136,8 +142,15 @@ export function buildFallbackSummary(input: FallbackInput): ExecutiveSummary {
     bonusNamed.length > 0
       ? `${bonusNamed.join(", ")} ${bonusNamed.length === 1 ? "goes" : "go"} beyond what the posting asks for.`
       : null,
-    sc.impact_score.score >= 75 ? "Bullets carry real numbers, which is what gets read." : null,
-    sc.grammar_score.score >= 82 ? "The writing is clean — little to no language errors." : null,
+    // Both of these read the writing scores, which are derived from the error
+    // list. When the audit did not run that list is empty for the wrong
+    // reason, so claiming either would assert a finding never measured.
+    auditRan && sc.impact_score.score >= 75
+      ? "Bullets carry real numbers, which is what gets read."
+      : null,
+    auditRan && sc.grammar_score.score >= 82
+      ? "The writing is clean — little to no language errors."
+      : null,
   ].filter((s): s is string => s !== null);
 
   const improvements = [
@@ -155,7 +168,13 @@ export function buildFallbackSummary(input: FallbackInput): ExecutiveSummary {
     critical.length > 0
       ? `${critical.length} critical writing ${critical.length === 1 ? "error" : "errors"} — fix ${critical.length === 1 ? "that" : "those"} before anything else.`
       : null,
-    sc.impact_score.score < 75 ? "Too many bullets have no numbers behind them." : null,
+    auditRan && sc.impact_score.score < 75
+      ? "Too many bullets have no numbers behind them."
+      : null,
+    // Say the gap out loud rather than letting an unaudited resume read as a
+    // clean one. The route also warns separately; this keeps the summary
+    // itself honest.
+    auditRan ? null : "The writing audit didn't run this time, so nothing here reflects your wording.",
   ].filter((s): s is string => s !== null);
 
   const pad = (arr: string[], filler: string[]): string[] =>

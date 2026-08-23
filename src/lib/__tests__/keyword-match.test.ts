@@ -150,6 +150,24 @@ describe("isNegatedInJd", () => {
   it("still negates when every occurrence is negated", () => {
     expect(isNegatedInJd("Kubernetes", "No Kubernetes needed, and no Kubernetes experience expected.")).toBe(true);
   });
+
+  // A negator far from the skill used to negate it, which deleted the
+  // posting's hardest requirement from the analysis entirely.
+  it("does not negate when the negator governs a different phrase", () => {
+    expect(
+      isNegatedInJd("Python", "Candidates without a strong Python background will not be considered")
+    ).toBe(false);
+  });
+
+  it("does not negate across an intervening clause in the same sentence", () => {
+    expect(
+      isNegatedInJd("React", "We have no interest in candidates who cannot write React")
+    ).toBe(false);
+  });
+
+  it("still negates when the negator sits just before the skill", () => {
+    expect(isNegatedInJd("Java", "Roles without prior Java exposure are also open")).toBe(true);
+  });
 });
 
 describe("buildSkills word-level fallback", () => {

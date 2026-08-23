@@ -59,6 +59,46 @@ describe("computeScores", () => {
   });
 });
 
+describe("buildFallbackSummary — writing audit did not run", () => {
+  // An empty error list means "not measured" here, not "nothing wrong". The
+  // summary used to read the writing scores anyway and claim a clean resume.
+  const unaudited = () =>
+    buildFallbackSummary({
+      scorecard: computeScores({ errors: [], formattingAudit: CLEAN_AUDIT }).scorecard,
+      verdict: "moderate",
+      funnel: PASSING_FUNNEL,
+      mustHave: [],
+      errors: [],
+      bonusSkills: [],
+      writingAuditRan: false,
+    });
+
+  it("never claims the writing is clean", () => {
+    const summary = unaudited();
+    const all = [...summary.top_strengths, ...summary.top_improvements].join(" ");
+    expect(all).not.toContain("The writing is clean");
+    expect(all).not.toContain("Bullets carry real numbers");
+  });
+
+  it("says the audit did not run", () => {
+    expect(unaudited().top_improvements.join(" ")).toContain("writing audit didn't run");
+  });
+
+  it("does not announce a missing audit when the audit did run", () => {
+    const audited = buildFallbackSummary({
+      scorecard: computeScores({ errors: [], formattingAudit: CLEAN_AUDIT }).scorecard,
+      verdict: "moderate",
+      funnel: PASSING_FUNNEL,
+      mustHave: [],
+      errors: [],
+      bonusSkills: [],
+      writingAuditRan: true,
+    });
+    const all = [...audited.top_strengths, ...audited.top_improvements].join(" ");
+    expect(all).not.toContain("writing audit didn't run");
+  });
+});
+
 describe("buildFallbackSummary", () => {
   it("narrates the funnel, not a score", () => {
     const out = computeScores({ errors: [], formattingAudit: CLEAN_AUDIT });
