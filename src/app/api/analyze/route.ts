@@ -22,8 +22,18 @@ export const maxDuration = 60;
 // system_prompt is no longer accepted; zod strips unknown keys so old cached
 // clients that still send it are unaffected.
 const BodySchema = z.object({
-  resume_text: z.string().min(100, "Resume text too short"),
-  job_description: z.string().min(1, "Job description cannot be empty"),
+  // Upper bounds are far above any real résumé or posting, and far above the
+  // per-provider clips applied further down. They exist so an oversized body
+  // is rejected outright rather than fully buffered and then sliced — this
+  // route is unauthenticated up to the first provider call.
+  resume_text: z
+    .string()
+    .min(100, "Resume text too short")
+    .max(400_000, "That resume is unexpectedly large. Re-export the PDF and try again."),
+  job_description: z
+    .string()
+    .min(1, "Job description cannot be empty")
+    .max(200_000, "That job description is unexpectedly large. Paste just the posting."),
   provider: z
     .string()
     .optional()

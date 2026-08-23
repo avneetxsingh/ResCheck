@@ -26,7 +26,7 @@ export function ResumeUploader({
       } else if (rejected.length > 0) {
         const code = rejected[0].errors[0]?.code;
         if (code === "file-too-large") {
-          onFileRejected("That file is over 5 MB.");
+          onFileRejected("That file is over 4 MB.");
         } else if (code === "file-invalid-type") {
           onFileRejected("PDFs only — export your resume as a PDF first.");
         } else {
@@ -40,7 +40,10 @@ export function ResumeUploader({
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { "application/pdf": [".pdf"] },
-    maxSize: 5 * 1024 * 1024,
+    // Matches MAX_FILE_SIZE in /api/parse-pdf, which sits under Vercel's
+    // ~4.5MB body ceiling. Rejecting here means the user gets a sentence
+    // instead of a platform 413 after a pointless upload.
+    maxSize: 4 * 1024 * 1024,
     maxFiles: 1,
   });
 
@@ -91,7 +94,7 @@ export function ResumeUploader({
           {isDragActive ? "Drop it" : "Drop your resume here"}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          or click to browse · PDF, up to 5 MB
+          or click to browse · PDF, up to 4 MB
         </p>
       </div>
     </div>

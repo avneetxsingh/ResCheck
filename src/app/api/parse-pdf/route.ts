@@ -5,7 +5,11 @@ import type { ApiError } from "@/types/api";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+// Under Vercel's ~4.5MB request-body ceiling on purpose: at 5MB the platform
+// rejects the upload with a raw 413 before this handler runs, so the user sees
+// a bare error instead of the sentence below. ResumeUploader enforces and
+// advertises the same number client-side — change all three together.
+const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
 
 export async function POST(req: NextRequest) {
   try {
