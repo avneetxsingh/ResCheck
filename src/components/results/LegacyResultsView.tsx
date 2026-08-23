@@ -1,13 +1,15 @@
 "use client";
 
 import { useRef } from "react";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Section } from "./Section";
 import { ErrorReportPanel } from "./ErrorReportPanel";
+import { FormattingAuditPanel } from "./FormattingAuditPanel";
 import { SkillsGapPanel } from "./SkillsGapPanel";
 import { SummaryPanel } from "./SummaryPanel";
+import { ExportButton } from "./ExportButton";
 import type { AnalysisResult, ScorecardMetric } from "@/types/analysis";
 
 interface LegacyResultsViewProps {
@@ -46,11 +48,16 @@ export function LegacyResultsView({ result, onReset }: LegacyResultsViewProps) {
     <div ref={printRef} className="space-y-1">
       <div className="flex items-start justify-between gap-4 pb-4">
         <div>
-          <div className="flex items-baseline gap-3">
+          <div className="flex items-start gap-3">
             {typeof legacyScore === "number" && (
-              <span className="font-mono text-3xl font-semibold tabular-nums tracking-tight">
-                {legacyScore}
-              </span>
+              <div className="flex flex-col items-start">
+                <span className="font-mono text-3xl font-semibold tabular-nums tracking-tight leading-none">
+                  {legacyScore}
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mt-1">
+                  retired ATS score — no longer computed
+                </span>
+              </div>
             )}
             <span className={cn("font-mono text-lg font-semibold", VERDICT_CLASS[verdict])}>
               {VERDICT_LABEL[verdict] ?? "Moderate"}
@@ -60,16 +67,30 @@ export function LegacyResultsView({ result, onReset }: LegacyResultsViewProps) {
             {result.summary.headline}
           </p>
         </div>
-        <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={onReset}>
-          <RotateCcw className="w-3.5 h-3.5" />
-          New run
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <ExportButton result={result} targetRef={printRef} />
+          <Button variant="outline" size="sm" className="gap-2" onClick={onReset}>
+            <RotateCcw className="w-3.5 h-3.5" />
+            New run
+          </Button>
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground border border-border rounded-lg px-3 py-2 leading-relaxed">
         This run predates the screening funnel, so it has no gates. Run it again to see
         whether it parses, meets the posting&apos;s stated requirements, and surfaces in a search.
       </p>
+
+      {result.warnings && result.warnings.length > 0 && (
+        <ul className="space-y-1 py-3">
+          {result.warnings.map((w, i) => (
+            <li key={i} className="text-xs text-state-warn flex gap-1.5">
+              <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+              {w}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {writingMetrics.length > 0 && (
         <Section title="Writing quality">
@@ -88,6 +109,15 @@ export function LegacyResultsView({ result, onReset }: LegacyResultsViewProps) {
       {result.errors.length > 0 && (
         <Section title="Writing" count={result.errors.length} defaultOpen={false}>
           <ErrorReportPanel errors={result.errors} />
+        </Section>
+      )}
+
+      {result.formatting_audit && (
+        <Section title="What the ATS sees" defaultOpen={false}>
+          <FormattingAuditPanel
+            audit={result.formatting_audit}
+            atsExtraction={result.ats_extraction}
+          />
         </Section>
       )}
 
