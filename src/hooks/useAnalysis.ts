@@ -6,6 +6,10 @@ import type { HistoryEntry } from "@/types/history";
 import type { ApiError } from "@/types/api";
 import type { ProviderId } from "@/lib/providers/catalog";
 
+// Mirrors MAX_PAGES in src/lib/pdf-parser.ts, which is server-only
+// (createRequire) and so cannot be imported here. Change both together.
+const PARSED_PAGE_LIMIT = 20;
+
 export type AnalysisStage =
   | "idle"
   | "parsing"
@@ -142,7 +146,20 @@ export function useAnalysis(
           throw new Error(err.error);
         }
 
-        const { text: resumeText } = await parseRes.json();
+        const { text: resumeText, page_count: pageCount } = await parseRes.json();
+
+        // The parser stops at PARSED_PAGE_LIMIT so an unauthenticated endpoint
+        // cannot be made to walk an arbitrarily long document. It still reports
+        // the true page count, and this is where that becomes visible —
+        // silently analysing the first N pages would quietly skew dated
+        // experience and the employment-gap signals, which are computed only
+        // from what was read.
+        if (typeof pageCount === "number" && pageCount > PARSED_PAGE_LIMIT) {
+          setWarnings((w) => [
+            ...w,
+            `Only the first ${PARSED_PAGE_LIMIT} pages of your ${pageCount}-page resume were read. Anything after that wasn't analysed, including dates and employment gaps.`,
+          ]);
+        }
 
         // Step 2: Analyze — SSE stream with real per-stage progress
         setStage("analyzing");

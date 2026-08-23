@@ -234,7 +234,12 @@ async function callStage<T>(opts: {
           await new Promise((r) => setTimeout(r, retryAfterSeconds * 1000));
           continue;
         }
-        return { ok: false, reason: "failed" };
+        // Carry the detail: the terminal handler regex-tests it to tell a
+        // daily-quota exhaustion from a generic failure, and "try again in a
+        // minute" is wrong advice for a quota that resets on a daily cycle.
+        // Providers return no retry-after on the common 429, so this is the
+        // branch a quota-exhausted user actually takes.
+        return { ok: false, reason: "failed", detail: lastDetail };
       }
       if (i === 0) {
         // Naming the cause matters: an unexplained "failed" hid a model
@@ -274,7 +279,14 @@ export async function POST(req: NextRequest) {
   const provider =
     resolveProvider(body.provider) ?? (legacyGroqOnly ? PROVIDERS.groq : PROVIDERS[DEFAULT_PROVIDER]);
 
-  const model = body.model ?? provider.defaultModel;
+  // A cached legacy bundle also sends the model default of its own era, which
+  // the allowlist below no longer contains — so without this the fallback
+  // above was dead on arrival and every legacy request 400'd on the model
+  // instead. Only the legacy path gets this leniency: an unknown model on a
+  // current request is still an error the user needs to see.
+  const requestedModel = body.model ?? provider.defaultModel;
+  const modelIsKnown = provider.models.some((m) => m.id === requestedModel);
+  const model = !modelIsKnown && legacyGroqOnly ? provider.defaultModel : requestedModel;
   if (!provider.models.some((m) => m.id === model)) {
     return NextResponse.json<ApiError>(
       {

@@ -12,8 +12,12 @@ const pdfParse = require("pdf-parse") as (
 
 // This endpoint is unauthenticated and parses hostile binary input in-process,
 // so an unbounded page walk is a free compute lever for a stranger. No résumé
-// worth screening runs past 20 pages, and pdf-parse still reports the true
-// numpages, so a truncated parse stays visible rather than silent.
+// worth screening runs past 20 pages.
+//
+// pdf-parse still reports the true numpages, and useAnalysis compares it
+// against this number to warn the user when their document was truncated.
+// This module is server-only (createRequire), so the client cannot import the
+// constant — PARSED_PAGE_LIMIT in useAnalysis.ts mirrors it. Change both.
 const MAX_PAGES = 20;
 
 export async function parsePdf(buffer: Buffer): Promise<ParsePdfResponse> {

@@ -70,26 +70,50 @@ export function useSettings() {
 
   useEffect(() => {
     const loaded = loadSettings();
-    // Migrate the pre-provider standalone key, then retire it.
-    const oldKey = localStorage.getItem("rescheck_api_key");
-    if (oldKey && !loaded.apiKeys.groq) {
-      loaded.apiKeys = { ...loaded.apiKeys, groq: oldKey };
-      loaded.provider = "groq";
-      loaded.model = PROVIDERS.groq.defaultModel;
+    // Storage can throw outright — site data blocked for the origin, or quota
+    // exhausted. Unguarded, this effect threw before setHydrated, and an
+    // uncaught error in a client effect takes the whole tree to the global
+    // error page: the app became unusable rather than merely unable to
+    // remember anything. Degrade to in-memory settings instead.
+    try {
+      // Migrate the pre-provider standalone key, then retire it.
+      const oldKey = localStorage.getItem("rescheck_api_key");
+      if (oldKey && !loaded.apiKeys.groq) {
+        loaded.apiKeys = { ...loaded.apiKeys, groq: oldKey };
+        loaded.provider = "groq";
+        loaded.model = PROVIDERS.groq.defaultModel;
+      }
+      if (oldKey) localStorage.removeItem("rescheck_api_key");
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
+    } catch {
+      // Nothing to do — the session works, it just will not persist.
     }
-    if (oldKey) localStorage.removeItem("rescheck_api_key");
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
     setSettingsState(loaded);
     setHydrated(true);
   }, []);
 
-  const saveSettings = useCallback((updated: Partial<AppSettings>) => {
-    setSettingsState((prev) => {
-      const next = { ...prev, ...updated };
+  // Writing inside the state updater ran the write twice under StrictMode and
+  // put a side effect in a function contracted to be pure. Persisting is also
+  // allowed to fail (blocked storage, full quota) without losing the change
+  // in memory — the session keeps working, it just will not be remembered.
+  const persist = useCallback((next: AppSettings) => {
+    try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
+    } catch {
+      // In-memory only from here.
+    }
   }, []);
+
+  const saveSettings = useCallback(
+    (updated: Partial<AppSettings>) => {
+      setSettingsState((prev) => {
+        const next = { ...prev, ...updated };
+        queueMicrotask(() => persist(next));
+        return next;
+      });
+    },
+    [persist]
+  );
 
   // Switching provider carries its own model, never the other provider's.
   const setProvider = useCallback(
@@ -103,15 +127,19 @@ export function useSettings() {
     (provider: ProviderId, key: string) => {
       setSettingsState((prev) => {
         const next = { ...prev, apiKeys: { ...prev.apiKeys, [provider]: key } };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        queueMicrotask(() => persist(next));
         return next;
       });
     },
-    []
+    [persist]
   );
 
   const resetAll = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Blocked storage — the in-memory reset below still happens.
+    }
     setSettingsState({ ...DEFAULTS, apiKeys: {} });
   }, []);
 

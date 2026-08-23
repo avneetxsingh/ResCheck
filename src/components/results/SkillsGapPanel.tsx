@@ -163,6 +163,11 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
     return true;
   });
 
+  // Zero missing is vacuously true when nothing was extracted from the
+  // posting, so every success string below has to check this first.
+  const anyRequirements =
+    skillsGap.must_have.length + skillsGap.nice_to_have.length > 0;
+
   const missingCount = [
     ...skillsGap.must_have,
     ...skillsGap.nice_to_have,
@@ -178,9 +183,11 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
         <div>
           <p className="font-medium">Skill match</p>
           <p className="text-sm text-muted-foreground mt-1">
-            {missingCount > 0
-              ? `${missingCount} ${missingCount === 1 ? "skill" : "skills"} from the posting ${missingCount === 1 ? "doesn't" : "don't"} appear in your resume.`
-              : "Every skill the posting asks for shows up in your resume."}
+            {!anyRequirements
+              ? "No requirements could be read from this posting, so there was nothing to match against."
+              : missingCount > 0
+                ? `${missingCount} ${missingCount === 1 ? "skill" : "skills"} from the posting ${missingCount === 1 ? "doesn't" : "don't"} appear in your resume.`
+                : "Every skill the posting asks for shows up in your resume."}
           </p>
           {skillsGap.bonus_skills.length > 0 && (
             <p className="text-xs text-primary mt-1.5 flex items-center gap-1">
@@ -284,8 +291,10 @@ export function SkillsGapPanel({ skillsGap }: SkillsGapPanelProps) {
         </div>
       )}
 
-      {/* Perfect match state */}
-      {missingCount === 0 && (
+      {/* Perfect match state — vacuously true with no requirements, where it
+          contradicted the route's own "no usable requirements" warning in the
+          same view, so it needs something to actually have been checked. */}
+      {anyRequirements && missingCount === 0 && (
         <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/5 border border-green-500/30">
           <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
           <p className="text-sm text-green-700 dark:text-green-400">

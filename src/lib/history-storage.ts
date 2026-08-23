@@ -13,20 +13,36 @@ export function getHistory(): HistoryEntry[] {
   }
 }
 
+// Entries grew materially with the funnel and per-skill evidence, so a full
+// quota is reachable — and an unguarded throw here would land at the end of an
+// analysis the user just waited for, losing the result they can see on screen.
+// Failing to save is survivable; crashing the view is not.
+function write(value: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, value);
+  } catch {
+    // Storage blocked or full — the session keeps its result in memory.
+  }
+}
+
 export function addHistoryEntry(entry: HistoryEntry): void {
   if (typeof window === "undefined") return;
   const history = getHistory();
   const updated = [entry, ...history].slice(0, MAX_ENTRIES);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  write(JSON.stringify(updated));
 }
 
 export function removeHistoryEntry(id: string): void {
   if (typeof window === "undefined") return;
   const history = getHistory().filter((e) => e.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  write(JSON.stringify(history));
 }
 
 export function clearHistory(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(STORAGE_KEY);
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Nothing to do.
+  }
 }
