@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
-import { Settings, Sun, Moon } from "lucide-react";
+import { History, Settings, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/hooks/useSettings";
 import { useAnalysis } from "@/hooks/useAnalysis";
@@ -10,7 +10,7 @@ import { useHistory } from "@/hooks/useHistory";
 import { InputRail } from "./InputRail";
 import { RunSummary } from "./RunSummary";
 import { SettingsDialog } from "./SettingsDialog";
-import { PastRuns } from "./PastRuns";
+import { HistoryPanel } from "./HistoryPanel";
 import { ResultsView } from "@/components/results/ResultsView";
 
 export function Workspace() {
@@ -38,6 +38,7 @@ export function Workspace() {
   // reopen it; that intent has to outlive the next render, so it is state.
   const [railOpen, setRailOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   // The theme toggle lived in Navbar, which Task 7 deletes. It is the only
   // toggle in the app, so the workspace header must carry it or the user is
   // stranded in whatever theme they last had.
@@ -73,6 +74,24 @@ export function Workspace() {
               {resolvedTheme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setHistoryOpen(true)}
+            aria-label={
+              history.length > 0
+                ? `History, ${history.length} past ${history.length === 1 ? "run" : "runs"}`
+                : "History"
+            }
+            className="relative"
+          >
+            <History className="w-4 h-4" />
+            {history.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 rounded-full bg-muted px-1 font-mono text-[10px] leading-tight text-muted-foreground">
+                {history.length}
+              </span>
+            )}
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -125,7 +144,9 @@ export function Workspace() {
         </div>
       )}
 
-      <PastRuns
+      <HistoryPanel
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
         entries={history}
         activeId={viewingId}
         onSelect={(id) => { setViewingId(id); setRailOpen(false); }}
