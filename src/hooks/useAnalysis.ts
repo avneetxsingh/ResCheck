@@ -86,7 +86,9 @@ export function useAnalysis(
   apiKey: string,
   provider: ProviderId,
   model: string,
-  onComplete?: (entry: HistoryEntry) => void
+  onComplete?: (entry: HistoryEntry) => void,
+  onFreeRunsRemaining?: (remaining: number) => void,
+  onHostedRunFailed?: () => void
 ) {
   const [stage, setStage] = useState<AnalysisStage>("idle");
   const [progress, setProgress] = useState(0);
@@ -108,11 +110,6 @@ export function useAnalysis(
 
   const analyze = useCallback(
     async (file: File, jobDescription: string) => {
-      if (!apiKey) {
-        setError("Add your API key in Settings first.");
-        return;
-      }
-
       // Cancel any in-flight request from a previous call
       abortControllerRef.current?.abort();
 
@@ -125,6 +122,13 @@ export function useAnalysis(
       setError(null);
       setResult(null);
       setWarnings([]);
+
+      const usingHosted = apiKey.trim().length === 0;
+      // Flips true only once the analyze response itself came back 200 — the
+      // server writes its Set-Cookie (charging this run) before the SSE body
+      // streams, so a pre-stream 400/403/503 never charged anything and must
+      // never trigger a refund below.
+      let chargedHostedRun = false;
 
       try {
         // Step 1: Parse PDF
@@ -165,28 +169,54 @@ export function useAnalysis(
         setStage("analyzing");
         setProgress(35);
 
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (!usingHosted) headers["x-provider-api-key"] = apiKey;
+        // Corroborates the server's cookie: clearing cookies does not always
+        // clear localStorage, so this keeps the cap meaningful in that case.
+        if (usingHosted) {
+          try {
+            const seen = window.localStorage.getItem("rescheck_free_runs_used");
+            if (seen) headers["x-free-runs-used"] = seen;
+          } catch {
+            // Site data blocked. The cookie alone still meters this visitor.
+          }
+        }
+
         const analyzeRes = await fetch("/api/analyze", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-provider-api-key": apiKey,
-          },
-          body: JSON.stringify({
-            resume_text: resumeText,
-            job_description: jobDescription,
-            provider,
-            model,
-          }),
+          headers,
+          body: JSON.stringify(
+            usingHosted
+              ? { resume_text: resumeText, job_description: jobDescription }
+              : { resume_text: resumeText, job_description: jobDescription, provider, model }
+          ),
           signal: controller.signal,
         });
 
         if (thisCall !== callCountRef.current) return; // superseded
+
+        const remainingHeader = analyzeRes.headers.get("X-Free-Runs-Remaining");
+        if (remainingHeader !== null) {
+          const n = Number(remainingHeader);
+          if (Number.isInteger(n) && n >= 0) {
+            onFreeRunsRemaining?.(n);
+            try {
+              window.localStorage.setItem("rescheck_free_runs_used", String(2 - n));
+            } catch {
+              // Site data blocked — degrade, never crash. See the localStorage
+              // convention in CLAUDE.md.
+            }
+          }
+        }
 
         // Pre-stream validation failures come back as plain JSON with a 4xx status
         if (!analyzeRes.ok) {
           const err: ApiError = await analyzeRes.json();
           throw new Error(err.error);
         }
+        // A 200 here means the server already charged this run — anything
+        // that fails from this point on refunds it.
+        chargedHostedRun = true;
         if (!analyzeRes.body) {
           throw new Error("Your browser doesn't support streamed responses — try a current Chrome, Safari, or Firefox.");
         }
@@ -256,6 +286,10 @@ export function useAnalysis(
         if (err instanceof Error && err.name === "AbortError") return;
         if (thisCall !== callCountRef.current) return; // stale error from old call
 
+        // Only a charged run gets refunded — a 403 FREE_RUNS_EXHAUSTED or a
+        // 503 HOSTED_* response above never reached this point.
+        if (chargedHostedRun && usingHosted) onHostedRunFailed?.();
+
         setStage("error");
         setProgress(0);
         setError(
@@ -263,7 +297,7 @@ export function useAnalysis(
         );
       }
     },
-    [apiKey, provider, model, onComplete]
+    [apiKey, provider, model, onComplete, onFreeRunsRemaining, onHostedRunFailed]
   );
 
   const reset = useCallback(() => {

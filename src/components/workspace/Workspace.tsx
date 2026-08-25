@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useSettings } from "@/hooks/useSettings";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useHistory } from "@/hooks/useHistory";
+import { useFreeRuns } from "@/hooks/useFreeRuns";
 import { InputRail } from "./InputRail";
 import { RunSummary } from "./RunSummary";
 import { SettingsDialog } from "./SettingsDialog";
@@ -19,11 +20,21 @@ export function Workspace() {
   // never reach the rail's "no API key" check.
   const { apiKey, hydrated, settings, saveSettings, defaults } = useSettings();
   const { history, addEntry, removeEntry } = useHistory();
+  const {
+    remaining: freeRunsRemaining,
+    limit: freeRunLimit,
+    available: hostedAvailable,
+    hydrated: freeRunsHydrated,
+    setRemaining: setFreeRunsRemaining,
+    refund: refundFreeRun,
+  } = useFreeRuns();
   const { stage, progress, result, error, warnings, analyze, reset } = useAnalysis(
     apiKey,
     settings.provider,
     settings.model,
-    addEntry
+    addEntry,
+    setFreeRunsRemaining,
+    refundFreeRun
   );
   // null means "show the live result"; an id means a past run is being viewed.
   const [viewingId, setViewingId] = useState<string | null>(null);
@@ -48,7 +59,14 @@ export function Workspace() {
 
   const isRunning = stage === "parsing" || stage === "analyzing";
   const hasKey = apiKey.length > 10;
-  const canSubmit = hasKey && file !== null && jobDescription.trim().length > 0 && !isRunning;
+  // A visitor with no key is the normal case now: they run on ours until the
+  // free allowance is gone. Only then does a key become required.
+  const outOfFreeRuns = freeRunsHydrated && !hasKey && hostedAvailable && freeRunsRemaining === 0;
+  // Hosted analysis was never configured on this deployment. A visitor here has
+  // not "used up" anything, and must not be told they have.
+  const hostedUnavailable = freeRunsHydrated && !hasKey && !hostedAvailable;
+  const needsOwnKey = outOfFreeRuns || hostedUnavailable;
+  const canSubmit = file !== null && jobDescription.trim().length > 0 && !isRunning && !needsOwnKey;
 
   const showRail = railOpen || (result === null && viewing === null);
 
@@ -116,6 +134,11 @@ export function Workspace() {
           isRunning={isRunning}
           hydrated={hydrated}
           hasKey={hasKey}
+          freeRunsRemaining={freeRunsRemaining}
+          freeRunLimit={freeRunLimit}
+          outOfFreeRuns={outOfFreeRuns}
+          hostedUnavailable={hostedUnavailable}
+          needsOwnKey={needsOwnKey}
           stage={stage}
           progress={progress}
           warnings={warnings}

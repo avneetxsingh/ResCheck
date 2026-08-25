@@ -20,6 +20,11 @@ interface InputRailProps {
   isRunning: boolean;
   hydrated: boolean;
   hasKey: boolean;
+  freeRunsRemaining: number | null;
+  freeRunLimit: number;
+  outOfFreeRuns: boolean;
+  hostedUnavailable: boolean;
+  needsOwnKey: boolean;
   stage: AnalysisStage;
   progress: number;
   warnings: string[];
@@ -31,6 +36,7 @@ interface InputRailProps {
 export function InputRail({
   jobDescription, onJobDescriptionChange, file, onFileAccepted, onFileRejected,
   onClear, fileError, canSubmit, isRunning, hydrated, hasKey,
+  freeRunsRemaining, freeRunLimit, outOfFreeRuns, hostedUnavailable, needsOwnKey,
   stage, progress, warnings, error, onSubmit, onOpenSettings,
 }: InputRailProps) {
   return (
@@ -44,19 +50,51 @@ export function InputRail({
         and whether a recruiter&apos;s search would find you. It does not score you.
       </p>
 
-      {hydrated && !hasKey && (
+      {hydrated && !hasKey && !needsOwnKey && freeRunsRemaining !== null && (
+        <p className="text-sm text-muted-foreground">
+          <span className="font-mono tabular-nums text-foreground">{freeRunsRemaining}</span>{" "}
+          {freeRunsRemaining === 1 ? "free analysis" : "free analyses"} left on us — no key needed.{" "}
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="font-medium text-primary underline underline-offset-2"
+          >
+            Add your own key
+          </button>{" "}
+          for unlimited runs.
+        </p>
+      )}
+
+      {hydrated && outOfFreeRuns && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            No API key set.{" "}
+            You&apos;ve used your {freeRunLimit} free {freeRunLimit === 1 ? "analysis" : "analyses"}.{" "}
             <button
               type="button"
               onClick={onOpenSettings}
               className="font-medium text-primary underline underline-offset-2"
             >
-              Open settings
+              Add your own API key
             </button>{" "}
-            to add one.
+            for unlimited runs — it stays in your browser and never reaches our servers.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {hydrated && hostedUnavailable && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Free analyses aren&apos;t available on this deployment.{" "}
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Add your own API key
+            </button>{" "}
+            to run one — it stays in your browser.
           </AlertDescription>
         </Alert>
       )}
@@ -109,7 +147,7 @@ export function InputRail({
         </Button>
         {!canSubmit && !isRunning && hydrated && (
           <p className="text-xs text-muted-foreground">
-            {!hasKey
+            {needsOwnKey
               ? "Add an API key in settings first"
               : !file
                 ? "Add your résumé to continue"
