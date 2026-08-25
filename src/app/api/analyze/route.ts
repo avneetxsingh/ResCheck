@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { DEFAULT_PROVIDER, PROVIDERS, isProviderId, resolveProvider } from "@/lib/providers";
+import { isProviderId } from "@/lib/providers";
 import type { Provider } from "@/lib/providers";
+import { resolveAnalysisMode } from "@/lib/analysis-mode";
 import {
   JD_SKILLS_PROMPT, LINE_AUDIT_PROMPT, SUMMARY_PROMPT,
   buildJdSkillsUserPrompt, buildLineAuditUserPrompt, buildSummaryUserPrompt,
@@ -11,6 +12,8 @@ import { runFormattingAudit } from "@/lib/formatting-audit";
 import { buildSkills, extractBonusSkills, clipJd, sanitizeSkillName, isNegatedInJd } from "@/lib/keyword-match";
 import { computeScores, buildFallbackSummary, AUDIT_KEYS } from "@/lib/scoring";
 import { analyzeLimiter, clientKey } from "@/lib/rate-limit";
+import { FREE_RUN_COOKIE, FREE_RUN_LIMIT, freeRunState, serializeFreeRunCookie } from "@/lib/free-runs";
+import { hostedCapacityBreaker } from "@/lib/circuit-breaker";
 import { segmentRoles, computeWorkHistoryMetrics } from "@/lib/work-history";
 import { buildFunnel, deriveFunnelVerdict, normalizeRequirementType } from "@/lib/funnel";
 import type { ApiError } from "@/types/api";
@@ -272,14 +275,63 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // x-groq-api-key is the pre-abstraction header name. A browser holding a
-  // cached bundle keeps working until it reloads.
-  const apiKey = req.headers.get("x-provider-api-key") ?? req.headers.get("x-groq-api-key");
-  if (!apiKey || apiKey.trim().length === 0) {
-    return NextResponse.json<ApiError>(
-      { error: "API key required. Add one in Settings.", code: "INVALID_KEY" },
-      { status: 401 }
-    );
+  // Two modes. A request carrying a key is a Power User: unmetered, and it
+  // picks its own provider and model because it is paying for them. A request
+  // with no key runs on our key, and therefore chooses nothing — honouring a
+  // client-supplied model here would let a stranger point our key at the most
+  // expensive model on offer.
+  const byoKey = (req.headers.get("x-provider-api-key") ?? req.headers.get("x-groq-api-key"))?.trim() ?? "";
+  const usingHosted = byoKey.length === 0;
+
+  const hostedKey = process.env.HOSTED_PROVIDER_API_KEY?.trim() ?? "";
+  const freeRunSecret = process.env.FREE_RUN_SECRET?.trim() ?? "";
+
+  let hostedRunsUsed = 0;
+  if (usingHosted) {
+    // No secret means we cannot meter, and running unmetered on our own key is
+    // the one failure mode with an unbounded bill. Refuse instead.
+    if (hostedKey.length === 0 || freeRunSecret.length < 16) {
+      return NextResponse.json<ApiError>(
+        {
+          error: "Free analyses aren't available right now. Add your own API key in Settings to keep going.",
+          code: "HOSTED_UNAVAILABLE",
+        },
+        { status: 503 }
+      );
+    }
+
+    if (hostedCapacityBreaker.isOpen()) {
+      const retryAfterSeconds = hostedCapacityBreaker.retryAfterSeconds();
+      return NextResponse.json<ApiError>(
+        {
+          error: "Free analyses are used up for now. Add your own API key in Settings to keep going — it stays in your browser.",
+          code: "HOSTED_CAPACITY_EXHAUSTED",
+        },
+        { status: 503, headers: { "Retry-After": String(retryAfterSeconds) } }
+      );
+    }
+
+    // The spec pairs the cookie with a localStorage corroboration, because
+    // clearing cookies does not always clear localStorage. The client sends
+    // its own recollection; we take whichever count is higher. It is forgeable
+    // downward, but the cookie already covers that case — this only ever
+    // tightens enforcement, never loosens it.
+    const cookieState = freeRunState(req.cookies.get(FREE_RUN_COOKIE)?.value, freeRunSecret);
+    const hinted = Number(req.headers.get("x-free-runs-used") ?? "");
+    const hintedUsed =
+      Number.isInteger(hinted) && hinted >= 0 ? Math.min(hinted, FREE_RUN_LIMIT) : 0;
+    const used = Math.max(cookieState.used, hintedUsed);
+    const state = { used, remaining: Math.max(0, FREE_RUN_LIMIT - used), exhausted: used >= FREE_RUN_LIMIT };
+    if (state.exhausted) {
+      return NextResponse.json<ApiError>(
+        {
+          error: `You've used your ${FREE_RUN_LIMIT} free analyses. Add your own API key in Settings for unlimited runs — it never leaves your browser.`,
+          code: "FREE_RUNS_EXHAUSTED",
+        },
+        { status: 403 }
+      );
+    }
+    hostedRunsUsed = state.used;
   }
 
   let body: z.infer<typeof BodySchema>;
@@ -293,27 +345,25 @@ export async function POST(req: NextRequest) {
 
   // A request arriving with only the legacy header predates provider support,
   // so it is a Groq request regardless of what the default is now.
-  const legacyGroqOnly = !req.headers.get("x-provider-api-key") && !body.provider;
-  const provider =
-    resolveProvider(body.provider) ?? (legacyGroqOnly ? PROVIDERS.groq : PROVIDERS[DEFAULT_PROVIDER]);
+  const legacyGroqHeaderOnly = !req.headers.get("x-provider-api-key") && !body.provider;
 
-  // A cached legacy bundle also sends the model default of its own era, which
-  // the allowlist below no longer contains — so without this the fallback
-  // above was dead on arrival and every legacy request 400'd on the model
-  // instead. Only the legacy path gets this leniency: an unknown model on a
-  // current request is still an error the user needs to see.
-  const requestedModel = body.model ?? provider.defaultModel;
-  const modelIsKnown = provider.models.some((m) => m.id === requestedModel);
-  const model = !modelIsKnown && legacyGroqOnly ? provider.defaultModel : requestedModel;
-  if (!provider.models.some((m) => m.id === model)) {
-    return NextResponse.json<ApiError>(
-      {
-        error: `${provider.label} does not offer "${model}". Pick a different model in Settings.`,
-        code: "INVALID_REQUEST",
-      },
-      { status: 400 }
-    );
+  // Provider/model/key resolution is a pure function (src/lib/analysis-mode.ts)
+  // so the hosted path's money-safety property — it can never be pointed at a
+  // caller-chosen provider or model — is provable by a unit test rather than
+  // only by a live curl against a real key, which this environment lacks.
+  const modeResult = resolveAnalysisMode({
+    byoKey,
+    legacyGroqHeaderOnly,
+    bodyProvider: body.provider,
+    bodyModel: body.model,
+    hostedKey,
+    freeRunSecret,
+    hostedProvider: process.env.HOSTED_PROVIDER,
+  });
+  if (!modeResult.ok) {
+    return NextResponse.json<ApiError>({ error: modeResult.error, code: modeResult.code }, { status: modeResult.status });
   }
+  const { provider, model, apiKey } = modeResult;
 
   // Clips are a provider property: they exist to fit a free-tier ceiling.
   const resumeText = body.resume_text.slice(0, provider.budgets.resumeChars);
@@ -340,12 +390,12 @@ export async function POST(req: NextRequest) {
         // Stage 2+3 — AI-1 (JD skills) ∥ AI-2 (line audit)
         emit("stage", { stage: "skills", progress: 25 });
         const jdPromise = callStage({
-          provider, apiKey: apiKey.trim(), model, systemPrompt: JD_SKILLS_PROMPT,
+          provider, apiKey, model, systemPrompt: JD_SKILLS_PROMPT,
           userPrompt: buildJdSkillsUserPrompt(jdText),
           schema: JdSkillsSchema, maxTokens: provider.budgets.maxOutputTokens.jdSkills, onWarning: warn,
         });
         const errorsPromise = callStage({
-          provider, apiKey: apiKey.trim(), model, systemPrompt: LINE_AUDIT_PROMPT,
+          provider, apiKey, model, systemPrompt: LINE_AUDIT_PROMPT,
           userPrompt: buildLineAuditUserPrompt(
             buildSectionizedText(structured),
             sectionNames(structured),
@@ -364,7 +414,18 @@ export async function POST(req: NextRequest) {
           (!jdOutcome.ok && jdOutcome.reason === "auth") ||
           (!errorsOutcome.ok && errorsOutcome.reason === "auth")
         ) {
-          emit("error", { error: `Invalid ${provider.label} API key. Check your key and try again.`, code: "INVALID_KEY" });
+          // On the hosted path that key is ours, not the visitor's — telling
+          // them to check a key they never entered is both wrong and
+          // unfixable by them.
+          emit("error", {
+            error: usingHosted
+              ? "Free analyses aren't working right now — this one's on us, not you. Add your own API key in Settings to keep going."
+              : `Invalid ${provider.label} API key. Check your key and try again.`,
+            code: usingHosted ? "HOSTED_UNAVAILABLE" : "INVALID_KEY",
+          });
+          // A revoked or misconfigured hosted key fails identically on every
+          // request, so hammering it on every visitor's turn helps nobody.
+          if (usingHosted) hostedCapacityBreaker.trip();
           controller.close();
           return;
         }
@@ -384,6 +445,10 @@ export async function POST(req: NextRequest) {
           // they need opposite responses from the user, so name the cause.
           const detail = (!jdOutcome.ok && jdOutcome.detail) || (!errorsOutcome.ok && errorsOutcome.detail) || "";
           const quota = /rate.?limit|quota|429|tokens per day|requests per day|TPD|RPD/i.test(detail);
+          // Only the hosted key's exhaustion is ours to remember. A Power
+          // User hitting their own quota must never take down the free path
+          // for everyone else.
+          if (quota && usingHosted) hostedCapacityBreaker.trip();
           emit("error", {
             error: quota
               ? `You've hit ${provider.label}'s rate or daily quota limit, so no model call could complete. Free-tier quotas reset on a daily cycle — wait and retry, or switch provider in Settings. (${detail.slice(0, 200)})`
@@ -490,7 +555,7 @@ export async function POST(req: NextRequest) {
         ].join("\n");
 
         const summaryOutcome = await callStage({
-          provider, apiKey: apiKey.trim(), model, systemPrompt: SUMMARY_PROMPT,
+          provider, apiKey, model, systemPrompt: SUMMARY_PROMPT,
           userPrompt: buildSummaryUserPrompt(digest),
           schema: SummarySchema, maxTokens: provider.budgets.maxOutputTokens.summary, onWarning: warn,
         });
@@ -556,11 +621,21 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-    },
-  });
+  const responseHeaders: Record<string, string> = {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+  };
+
+  if (usingHosted) {
+    // Set-Cookie can only be sent with the response headers, which are
+    // written before the SSE body streams — so the run is charged up front.
+    // If the run terminates in an error, the client refunds it locally.
+    const nextUsed = hostedRunsUsed + 1;
+    const secure = (req.headers.get("x-forwarded-proto") ?? "http") === "https";
+    responseHeaders["Set-Cookie"] = serializeFreeRunCookie(nextUsed, freeRunSecret, secure);
+    responseHeaders["X-Free-Runs-Remaining"] = String(Math.max(0, FREE_RUN_LIMIT - nextUsed));
+  }
+
+  return new Response(stream, { headers: responseHeaders });
 }
