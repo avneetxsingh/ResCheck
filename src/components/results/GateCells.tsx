@@ -36,7 +36,7 @@ interface CellProps {
 
 function Cell({ label, value, tone }: CellProps) {
   return (
-    <div className="border border-border rounded-lg px-3 py-2.5 bg-card">
+    <div className="border border-border rounded-lg px-3 py-2.5 bg-muted/40">
       <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </div>

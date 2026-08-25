@@ -29,7 +29,7 @@ export function Section({ title, count, defaultOpen = true, children }: SectionP
           )}
           aria-hidden
         />
-        <h3 className="font-mono text-xs uppercase tracking-wider text-muted-foreground flex-1">
+        <h3 className="flex-1 text-sm font-medium tracking-tight">
           {title}
         </h3>
         {count !== undefined && (
