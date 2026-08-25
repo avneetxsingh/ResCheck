@@ -7,10 +7,12 @@ import type { FreeRunsResponse } from "@/types/api";
 // something honest for null rather than assuming a number — showing "2 free
 // runs" to a visitor who has none left is exactly the kind of small lie this
 // product does not tell.
+// Similarly, `available` is null until the server answers — a failed fetch is
+// not evidence the feature is unconfigured, only that we couldn't ask.
 export function useFreeRuns() {
   const [remaining, setRemaining] = useState<number | null>(null);
   const [limit, setLimit] = useState(2);
-  const [available, setAvailable] = useState(false);
+  const [available, setAvailable] = useState<boolean | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -25,8 +27,9 @@ export function useFreeRuns() {
         setLimit(data.limit);
         setAvailable(data.available);
       } catch {
-        // Offline or blocked. Leaving remaining at null is correct: we do not
-        // know, so the UI must not claim a number.
+        // Offline or blocked. Leaving remaining and available at null is
+        // correct: we do not know, so the UI must not claim a number or a
+        // deployment state that the client was never asked about.
       } finally {
         if (!cancelled) setHydrated(true);
       }

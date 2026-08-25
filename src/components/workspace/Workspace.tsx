@@ -61,10 +61,12 @@ export function Workspace() {
   const hasKey = apiKey.length > 10;
   // A visitor with no key is the normal case now: they run on ours until the
   // free allowance is gone. Only then does a key become required.
-  const outOfFreeRuns = freeRunsHydrated && !hasKey && hostedAvailable && freeRunsRemaining === 0;
+  const outOfFreeRuns = freeRunsHydrated && !hasKey && (hostedAvailable === true) && freeRunsRemaining === 0;
   // Hosted analysis was never configured on this deployment. A visitor here has
-  // not "used up" anything, and must not be told they have.
-  const hostedUnavailable = freeRunsHydrated && !hasKey && !hostedAvailable;
+  // not "used up" anything, and must not be told they have. Only claim
+  // unavailability when the server explicitly answered false, not when the
+  // fetch failed (available is null in that case — we do not know).
+  const hostedUnavailable = freeRunsHydrated && !hasKey && (hostedAvailable === false);
   const needsOwnKey = outOfFreeRuns || hostedUnavailable;
   const canSubmit = file !== null && jobDescription.trim().length > 0 && !isRunning && !needsOwnKey;
 
