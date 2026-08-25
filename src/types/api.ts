@@ -22,9 +22,22 @@ export type ApiErrorCode =
   | "RATE_LIMITED"
   | "INVALID_JSON"
   | "INVALID_REQUEST"
+  | "FREE_RUNS_EXHAUSTED"
+  | "HOSTED_UNAVAILABLE"
+  | "HOSTED_CAPACITY_EXHAUSTED"
   | "UNKNOWN";
 
 export interface ApiError {
   error: string;
   code: ApiErrorCode;
+}
+
+export interface FreeRunsResponse {
+  remaining: number;
+  limit: number;
+  // false when hosted analysis is not configured on this deployment at all.
+  // Without this the client cannot tell "you have spent your free runs" from
+  // "there were never any free runs here", and would tell a first-time visitor
+  // they had used an allowance they never had.
+  available: boolean;
 }
