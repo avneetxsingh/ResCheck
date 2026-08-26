@@ -12,7 +12,10 @@ import { runFormattingAudit } from "@/lib/formatting-audit";
 import { buildSkills, extractBonusSkills, clipJd, sanitizeSkillName, isNegatedInJd } from "@/lib/keyword-match";
 import { computeScores, buildFallbackSummary, AUDIT_KEYS } from "@/lib/scoring";
 import { analyzeLimiter, clientKey } from "@/lib/rate-limit";
-import { FREE_RUN_COOKIE, FREE_RUN_LIMIT, freeRunState, serializeFreeRunCookie } from "@/lib/free-runs";
+import {
+  FREE_RUN_COOKIE, FREE_RUN_LIMIT, freeRunState, serializeFreeRunCookie,
+  resolveUsed, serializeRefundTokenCookie,
+} from "@/lib/free-runs";
 import { hostedCapacityBreaker } from "@/lib/circuit-breaker";
 import { segmentRoles, computeWorkHistoryMetrics } from "@/lib/work-history";
 import { buildFunnel, deriveFunnelVerdict, normalizeRequirementType } from "@/lib/funnel";
@@ -301,10 +304,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (hostedCapacityBreaker.isOpen()) {
+      // The capacity that failed is ours, not the visitor's — this mirrors
+      // the auth-failure message below rather than the "you're out of free
+      // analyses" wording, which would blame them for our outage while the
+      // rail above may still show runs remaining.
       const retryAfterSeconds = hostedCapacityBreaker.retryAfterSeconds();
+      const retryMinutes = Math.ceil(retryAfterSeconds / 60);
+      const wait =
+        retryAfterSeconds <= 60
+          ? `${retryAfterSeconds} ${retryAfterSeconds === 1 ? "second" : "seconds"}`
+          : `${retryMinutes} ${retryMinutes === 1 ? "minute" : "minutes"}`;
       return NextResponse.json<ApiError>(
         {
-          error: "Free analyses are used up for now. Add your own API key in Settings to keep going — it stays in your browser.",
+          error: `Free analyses aren't working right now — this is on us, not you. Wait about ${wait} and try again, or add your own API key in Settings to keep going.`,
           code: "HOSTED_CAPACITY_EXHAUSTED",
         },
         { status: 503, headers: { "Retry-After": String(retryAfterSeconds) } }
@@ -312,15 +324,13 @@ export async function POST(req: NextRequest) {
     }
 
     // The spec pairs the cookie with a localStorage corroboration, because
-    // clearing cookies does not always clear localStorage. The client sends
-    // its own recollection; we take whichever count is higher. It is forgeable
-    // downward, but the cookie already covers that case — this only ever
-    // tightens enforcement, never loosens it.
+    // clearing cookies does not always clear localStorage. resolveUsed takes
+    // whichever count is higher — forgeable downward, but the cookie already
+    // covers that case, so this only ever tightens enforcement, never
+    // loosens it. Shared with both /api/free-runs handlers so the number
+    // shown to a visitor is computed the same way as the number enforced.
     const cookieState = freeRunState(req.cookies.get(FREE_RUN_COOKIE)?.value, freeRunSecret);
-    const hinted = Number(req.headers.get("x-free-runs-used") ?? "");
-    const hintedUsed =
-      Number.isInteger(hinted) && hinted >= 0 ? Math.min(hinted, FREE_RUN_LIMIT) : 0;
-    const used = Math.max(cookieState.used, hintedUsed);
+    const used = resolveUsed(cookieState.used, req.headers.get("x-free-runs-used"));
     const state = { used, remaining: Math.max(0, FREE_RUN_LIMIT - used), exhausted: used >= FREE_RUN_LIMIT };
     if (state.exhausted) {
       return NextResponse.json<ApiError>(
@@ -358,7 +368,10 @@ export async function POST(req: NextRequest) {
     bodyModel: body.model,
     hostedKey,
     freeRunSecret,
-    hostedProvider: process.env.HOSTED_PROVIDER,
+    // Trimmed like hostedKey and freeRunSecret above — an untrimmed trailing
+    // newline in a platform env value would fail isProviderId and silently
+    // swap the owner's chosen provider for the app default.
+    hostedProvider: process.env.HOSTED_PROVIDER?.trim(),
   });
   if (!modeResult.ok) {
     return NextResponse.json<ApiError>({ error: modeResult.error, code: modeResult.code }, { status: modeResult.status });
@@ -621,20 +634,25 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const responseHeaders: Record<string, string> = {
+  // A Headers instance rather than a plain object: charging a run sets two
+  // cookies (the count, and a refund token proving this specific charge),
+  // and a plain object literal can only ever hold one value per key.
+  const responseHeaders = new Headers({
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive",
-  };
+  });
 
   if (usingHosted) {
     // Set-Cookie can only be sent with the response headers, which are
     // written before the SSE body streams — so the run is charged up front.
-    // If the run terminates in an error, the client refunds it locally.
+    // If the run terminates in an error, the client refunds it locally using
+    // the token below as proof the charge really happened.
     const nextUsed = hostedRunsUsed + 1;
     const secure = (req.headers.get("x-forwarded-proto") ?? "http") === "https";
-    responseHeaders["Set-Cookie"] = serializeFreeRunCookie(nextUsed, freeRunSecret, secure);
-    responseHeaders["X-Free-Runs-Remaining"] = String(Math.max(0, FREE_RUN_LIMIT - nextUsed));
+    responseHeaders.append("Set-Cookie", serializeFreeRunCookie(nextUsed, freeRunSecret, secure));
+    responseHeaders.append("Set-Cookie", serializeRefundTokenCookie(nextUsed, freeRunSecret, secure));
+    responseHeaders.set("X-Free-Runs-Remaining", String(Math.max(0, FREE_RUN_LIMIT - nextUsed)));
   }
 
   return new Response(stream, { headers: responseHeaders });

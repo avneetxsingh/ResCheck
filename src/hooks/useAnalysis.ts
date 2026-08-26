@@ -5,6 +5,7 @@ import type { AnalysisResult, RawAnalysisResult, LineError } from "@/types/analy
 import type { HistoryEntry } from "@/types/history";
 import type { ApiError } from "@/types/api";
 import type { ProviderId } from "@/lib/providers/catalog";
+import { readFreeRunsUsedHint, writeFreeRunsUsedHint } from "@/lib/free-runs-storage";
 
 // Mirrors MAX_PAGES in src/lib/pdf-parser.ts, which is server-only
 // (createRequire) and so cannot be imported here. Change both together.
@@ -86,6 +87,11 @@ export function useAnalysis(
   apiKey: string,
   provider: ProviderId,
   model: string,
+  // The authoritative limit from GET /api/free-runs (FreeRunsResponse.limit),
+  // not a literal — a hardcoded 2 here would silently go stale the day the
+  // server-side FREE_RUN_LIMIT changes, while the meter kept showing the old
+  // number.
+  freeRunLimit: number,
   onComplete?: (entry: HistoryEntry) => void,
   onFreeRunsRemaining?: (remaining: number) => void,
   onHostedRunFailed?: () => void
@@ -174,12 +180,8 @@ export function useAnalysis(
         // Corroborates the server's cookie: clearing cookies does not always
         // clear localStorage, so this keeps the cap meaningful in that case.
         if (usingHosted) {
-          try {
-            const seen = window.localStorage.getItem("rescheck_free_runs_used");
-            if (seen) headers["x-free-runs-used"] = seen;
-          } catch {
-            // Site data blocked. The cookie alone still meters this visitor.
-          }
+          const seen = readFreeRunsUsedHint();
+          if (seen) headers["x-free-runs-used"] = seen;
         }
 
         const analyzeRes = await fetch("/api/analyze", {
@@ -200,12 +202,7 @@ export function useAnalysis(
           const n = Number(remainingHeader);
           if (Number.isInteger(n) && n >= 0) {
             onFreeRunsRemaining?.(n);
-            try {
-              window.localStorage.setItem("rescheck_free_runs_used", String(2 - n));
-            } catch {
-              // Site data blocked — degrade, never crash. See the localStorage
-              // convention in CLAUDE.md.
-            }
+            writeFreeRunsUsedHint(freeRunLimit - n);
           }
         }
 
@@ -297,7 +294,7 @@ export function useAnalysis(
         );
       }
     },
-    [apiKey, provider, model, onComplete, onFreeRunsRemaining, onHostedRunFailed]
+    [apiKey, provider, model, freeRunLimit, onComplete, onFreeRunsRemaining, onHostedRunFailed]
   );
 
   const reset = useCallback(() => {

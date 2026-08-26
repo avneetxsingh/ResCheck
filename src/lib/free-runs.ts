@@ -66,3 +66,81 @@ export function serializeFreeRunCookie(used: number, secret: string, secure: boo
   if (secure) parts.push("Secure");
   return parts.join("; ");
 }
+
+// The client corroborates the cookie with its own localStorage recollection,
+// because clearing cookies does not always clear localStorage. The hint can
+// only ever raise the enforced count, never lower it — Math.max means a
+// visitor cannot use a stale/forged hint to claim fewer runs than the cookie
+// already says. /api/analyze and both /api/free-runs handlers must all
+// apply this exact rule, or the number a visitor is shown stops matching the
+// number that gets enforced against them.
+export function resolveUsed(cookieUsed: number, hintedHeader: string | null | undefined): number {
+  const hinted = Number(hintedHeader ?? "");
+  const hintedUsed = Number.isInteger(hinted) && hinted >= 0 ? Math.min(hinted, FREE_RUN_LIMIT) : 0;
+  return Math.max(cookieUsed, hintedUsed);
+}
+
+// ── Refund token ────────────────────────────────────────────────────────
+// Proof that /api/analyze actually charged a run, so POST /api/free-runs can
+// require it instead of being an unauthenticated decrement. Signed and
+// separate from the free-run cookie's own signature namespace (the "refund."
+// prefix) so a free-run cookie value can never be replayed as a token.
+export const REFUND_TOKEN_COOKIE = "rescheck_refund_token";
+// Long enough to cover a slow stream failure plus the client's own refund
+// call; short enough that a saved token cannot mint a run much later.
+const REFUND_TOKEN_TTL_SECONDS = 600;
+
+function signRefundToken(chargedTo: number, expiresAt: number, secret: string): string {
+  return sign(`refund.${chargedTo}.${expiresAt}`, secret);
+}
+
+export function encodeRefundToken(
+  chargedTo: number,
+  secret: string,
+  nowSeconds: number = Math.floor(Date.now() / 1000)
+): string {
+  const expiresAt = nowSeconds + REFUND_TOKEN_TTL_SECONDS;
+  return `${chargedTo}.${expiresAt}.${signRefundToken(chargedTo, expiresAt, secret)}`;
+}
+
+// Returns the charged-to count only for a validly signed, unexpired token;
+// null otherwise. A null result must refund nothing — that is the whole
+// point of the token existing.
+export function decodeRefundToken(
+  raw: string | undefined | null,
+  secret: string,
+  nowSeconds: number = Math.floor(Date.now() / 1000)
+): number | null {
+  if (!raw) return null;
+  const parts = raw.split(".");
+  if (parts.length !== 3) return null;
+  const [chargedToStr, expiresAtStr, signature] = parts;
+  const chargedTo = Number(chargedToStr);
+  const expiresAt = Number(expiresAtStr);
+  if (!Number.isInteger(chargedTo) || chargedTo < 1 || chargedTo > FREE_RUN_LIMIT) return null;
+  if (!Number.isInteger(expiresAt)) return null;
+  if (!safeEqual(signature, signRefundToken(chargedTo, expiresAt, secret))) return null;
+  if (nowSeconds > expiresAt) return null;
+  return chargedTo;
+}
+
+export function serializeRefundTokenCookie(chargedTo: number, secret: string, secure: boolean): string {
+  const parts = [
+    `${REFUND_TOKEN_COOKIE}=${encodeRefundToken(chargedTo, secret)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${REFUND_TOKEN_TTL_SECONDS}`,
+  ];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+// Sent after a token is redeemed so the same token cannot be presented
+// again — a normal browser drops the cookie immediately, and this is what
+// makes a second refund without a fresh charge a no-op.
+export function clearRefundTokenCookie(secure: boolean): string {
+  const parts = [`${REFUND_TOKEN_COOKIE}=`, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0"];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
+}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { FreeRunsResponse } from "@/types/api";
+import { readFreeRunsUsedHint, writeFreeRunsUsedHint } from "@/lib/free-runs-storage";
 
 // `remaining` is null until the first successful read. Consumers must render
 // something honest for null rather than assuming a number — showing "2 free
@@ -19,7 +20,13 @@ export function useFreeRuns() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/free-runs");
+        // Corroborates the cookie the same way /api/analyze does — without
+        // this header GET could report a count the very next analyze call
+        // enforces differently.
+        const headers: Record<string, string> = {};
+        const hint = readFreeRunsUsedHint();
+        if (hint) headers["x-free-runs-used"] = hint;
+        const res = await fetch("/api/free-runs", { headers });
         if (!res.ok) return;
         const data: FreeRunsResponse = await res.json();
         if (cancelled) return;
@@ -41,10 +48,18 @@ export function useFreeRuns() {
 
   const refund = useCallback(async () => {
     try {
-      const res = await fetch("/api/free-runs", { method: "POST" });
+      const headers: Record<string, string> = {};
+      const hint = readFreeRunsUsedHint();
+      if (hint) headers["x-free-runs-used"] = hint;
+      const res = await fetch("/api/free-runs", { method: "POST", headers });
       if (!res.ok) return;
       const data: FreeRunsResponse = await res.json();
       setRemaining(data.remaining);
+      // The server-side refund clears the free-run cookie's stale hint by
+      // rewriting it, but only in the cookie — without this the localStorage
+      // hint stays at the pre-refund count and outranks the refunded cookie
+      // on the very next request, silently undoing the refund it exists for.
+      writeFreeRunsUsedHint(data.limit - data.remaining);
     } catch {
       // A failed refund costs the visitor one run. Nothing useful to do here.
     }

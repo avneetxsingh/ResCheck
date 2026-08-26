@@ -32,6 +32,7 @@ export function Workspace() {
     apiKey,
     settings.provider,
     settings.model,
+    freeRunLimit,
     addEntry,
     setFreeRunsRemaining,
     refundFreeRun
@@ -58,7 +59,14 @@ export function Workspace() {
   useEffect(() => setMounted(true), []);
 
   const isRunning = stage === "parsing" || stage === "analyzing";
-  const hasKey = apiKey.length > 10;
+  // Matches useAnalysis's own definition of "has a key" exactly. A length
+  // heuristic here previously disagreed with useAnalysis (>10 vs non-empty):
+  // an 8-character key read as "no key" by the rail, which promised free
+  // analyses, while useAnalysis saw a non-empty key and billed the run to it
+  // anyway — a guaranteed "Invalid API key" one line under "no key needed".
+  // SettingsDialog keeps its own stricter validity hint; that heuristic
+  // belongs there, not here.
+  const hasKey = apiKey.trim().length > 0;
   // A visitor with no key is the normal case now: they run on ours until the
   // free allowance is gone. Only then does a key become required.
   const outOfFreeRuns = freeRunsHydrated && !hasKey && (hostedAvailable === true) && freeRunsRemaining === 0;

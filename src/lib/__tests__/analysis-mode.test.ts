@@ -62,11 +62,24 @@ describe("resolveAnalysisMode — hosted mode", () => {
     expect(justRight.ok).toBe(true);
   });
 
-  it("falls back to the app default provider when hostedProvider is unset or unknown", () => {
+  it("falls back to the app default provider when hostedProvider is unset", () => {
     const result = resolveAnalysisMode({ ...validHostedInput, hostedProvider: undefined });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.provider.id).toBe(DEFAULT_PROVIDER);
+  });
+
+  // A non-empty value that doesn't resolve (an unrecognized provider id, or a
+  // trailing newline surviving a caller that forgot to trim) must refuse
+  // rather than silently substitute the app default — that substitution is
+  // exactly what sent the owner's Groq key to Gemini and 401'd every hosted
+  // run with no signal why.
+  it("refuses with HOSTED_UNAVAILABLE 503 when hostedProvider is set but unrecognized", () => {
+    const result = resolveAnalysisMode({ ...validHostedInput, hostedProvider: "not-a-real-provider" });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("HOSTED_UNAVAILABLE");
+    expect(result.status).toBe(503);
   });
 });
 

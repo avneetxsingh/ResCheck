@@ -4,6 +4,10 @@ import {
   FREE_RUN_LIMIT,
   freeRunState,
   serializeFreeRunCookie,
+  resolveUsed,
+  REFUND_TOKEN_COOKIE,
+  decodeRefundToken,
+  clearRefundTokenCookie,
 } from "@/lib/free-runs";
 import { analyzeLimiter, clientKey } from "@/lib/rate-limit";
 import type { ApiError, FreeRunsResponse } from "@/types/api";
@@ -20,26 +24,41 @@ function isSecure(req: NextRequest): boolean {
   return (req.headers.get("x-forwarded-proto") ?? "http") === "https";
 }
 
+// A per-visitor counter is the one response an intermediary must never cache
+// on this visitor's behalf for the next one.
+function noStore(res: NextResponse): NextResponse {
+  res.headers.set("Cache-Control", "no-store");
+  return res;
+}
+
 // GET — how many hosted runs this visitor has left. Called on page load so the
 // meter is honest before the first run rather than after it.
 export async function GET(req: NextRequest) {
   const key = secret();
   const hostedConfigured = key !== null && (process.env.HOSTED_PROVIDER_API_KEY?.trim() ?? "").length > 0;
   if (!key || !hostedConfigured) {
-    return NextResponse.json<FreeRunsResponse>({ remaining: 0, limit: FREE_RUN_LIMIT, available: false });
+    return noStore(NextResponse.json<FreeRunsResponse>({ remaining: 0, limit: FREE_RUN_LIMIT, available: false }));
   }
-  const state = freeRunState(req.cookies.get(FREE_RUN_COOKIE)?.value, key);
-  return NextResponse.json<FreeRunsResponse>({
-    remaining: state.remaining,
-    limit: FREE_RUN_LIMIT,
-    available: true,
-  });
+  // Same corroboration rule /api/analyze enforces with — otherwise this
+  // number and the number that actually gets enforced can disagree, and a
+  // visitor is shown a count the very next click contradicts.
+  const cookieState = freeRunState(req.cookies.get(FREE_RUN_COOKIE)?.value, key);
+  const used = resolveUsed(cookieState.used, req.headers.get("x-free-runs-used"));
+  return noStore(
+    NextResponse.json<FreeRunsResponse>({
+      remaining: Math.max(0, FREE_RUN_LIMIT - used),
+      limit: FREE_RUN_LIMIT,
+      available: true,
+    })
+  );
 }
 
 // POST — refund one run. Called by the client when an analysis it paid for
-// terminated in an error. Refunds can only ever reduce recorded usage, so the
-// worst abuse is a visitor farming refunds to reset a cap we already decided
-// is soft. That is a better failure than billing someone for our own outage.
+// terminated in an error. Requires the signed refund-token cookie /api/analyze
+// sets when it charges a run: without it, nothing is refunded. That token is
+// the only proof a run was ever charged, so a visitor cannot manufacture a
+// refund out of nothing — the previous version let two bare POSTs take any
+// visitor from used=2 to used=0 with no charge behind either one.
 export async function POST(req: NextRequest) {
   const rateKey = clientKey(req.headers);
   if (rateKey) {
@@ -57,16 +76,34 @@ export async function POST(req: NextRequest) {
 
   const key = secret();
   if (!key) {
-    return NextResponse.json<FreeRunsResponse>({ remaining: 0, limit: FREE_RUN_LIMIT, available: false });
+    return noStore(NextResponse.json<FreeRunsResponse>({ remaining: 0, limit: FREE_RUN_LIMIT, available: false }));
   }
 
-  const state = freeRunState(req.cookies.get(FREE_RUN_COOKIE)?.value, key);
-  const refunded = Math.max(0, state.used - 1);
+  const cookieState = freeRunState(req.cookies.get(FREE_RUN_COOKIE)?.value, key);
+  const used = resolveUsed(cookieState.used, req.headers.get("x-free-runs-used"));
+  const secure = isSecure(req);
+
+  const tokenValid = decodeRefundToken(req.cookies.get(REFUND_TOKEN_COOKIE)?.value, key) !== null;
+  if (!tokenValid) {
+    // No proof a run was charged — report the honest current state and
+    // refund nothing. This is the branch a farmed, token-less POST now hits.
+    return noStore(
+      NextResponse.json<FreeRunsResponse>({
+        remaining: Math.max(0, FREE_RUN_LIMIT - used),
+        limit: FREE_RUN_LIMIT,
+        available: true,
+      })
+    );
+  }
+
+  const refunded = Math.max(0, used - 1);
   const res = NextResponse.json<FreeRunsResponse>({
     remaining: FREE_RUN_LIMIT - refunded,
     limit: FREE_RUN_LIMIT,
     available: true,
   });
-  res.headers.set("Set-Cookie", serializeFreeRunCookie(refunded, key, isSecure(req)));
-  return res;
+  res.headers.append("Set-Cookie", serializeFreeRunCookie(refunded, key, secure));
+  // Clears the token so this same proof cannot redeem a second refund.
+  res.headers.append("Set-Cookie", clearRefundTokenCookie(secure));
+  return noStore(res);
 }

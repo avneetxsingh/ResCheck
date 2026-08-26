@@ -14,8 +14,9 @@ export interface AnalysisModeInput {
   bodyModel: string | undefined;
   hostedKey: string; // already trimmed
   freeRunSecret: string; // already trimmed
-  // Read from process.env.HOSTED_PROVIDER by the caller — kept out of this
-  // function's own env access so the function stays pure and testable.
+  // Read from process.env.HOSTED_PROVIDER by the caller, already trimmed —
+  // kept out of this function's own env access so the function stays pure
+  // and testable.
   hostedProvider: string | undefined;
 }
 
@@ -44,7 +45,27 @@ export function resolveAnalysisMode(input: AnalysisModeInput): AnalysisModeResul
     // key at the most expensive model on offer. Provider comes only from the
     // owner's HOSTED_PROVIDER env var (passed in as hostedProvider); model
     // is always that provider's own default.
-    const provider = resolveProvider(input.hostedProvider) ?? PROVIDERS[DEFAULT_PROVIDER];
+    //
+    // Unset is a real, documented fallback to the app default (.env.example
+    // says so). A non-empty value that doesn't resolve is different: it means
+    // the owner set HOSTED_PROVIDER to something and it didn't take (e.g. a
+    // trailing newline from a platform env editor), so silently swapping in
+    // the default would send the owner's key to the wrong provider and 401
+    // every hosted run with no signal why. Refuse instead of guessing.
+    const trimmedHostedProvider = input.hostedProvider ?? "";
+    if (trimmedHostedProvider.length > 0) {
+      const provider = resolveProvider(trimmedHostedProvider);
+      if (!provider) {
+        return {
+          ok: false,
+          error: "Free analyses aren't available right now. Add your own API key in Settings to keep going.",
+          code: "HOSTED_UNAVAILABLE",
+          status: 503,
+        };
+      }
+      return { ok: true, usingHosted: true, provider, model: provider.defaultModel, apiKey: input.hostedKey };
+    }
+    const provider = PROVIDERS[DEFAULT_PROVIDER];
     return { ok: true, usingHosted: true, provider, model: provider.defaultModel, apiKey: input.hostedKey };
   }
 
