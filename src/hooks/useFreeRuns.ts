@@ -46,9 +46,15 @@ export function useFreeRuns() {
     };
   }, []);
 
-  const refund = useCallback(async () => {
+  // refundToken comes from the terminal `error` event of the SSE stream that
+  // charged the run — /api/free-runs now requires it as proof of that
+  // specific charge (it stopped accepting a bare, unauthenticated POST).
+  // Without one there is nothing to present, so skip the network call rather
+  // than send a request the server can only refuse.
+  const refund = useCallback(async (refundToken: string | undefined | null) => {
+    if (!refundToken) return;
     try {
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = { "x-refund-token": refundToken };
       const hint = readFreeRunsUsedHint();
       if (hint) headers["x-free-runs-used"] = hint;
       const res = await fetch("/api/free-runs", { method: "POST", headers });

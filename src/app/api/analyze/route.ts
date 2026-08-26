@@ -14,7 +14,7 @@ import { computeScores, buildFallbackSummary, AUDIT_KEYS } from "@/lib/scoring";
 import { analyzeLimiter, clientKey } from "@/lib/rate-limit";
 import {
   FREE_RUN_COOKIE, FREE_RUN_LIMIT, freeRunState, serializeFreeRunCookie,
-  resolveUsed, serializeRefundTokenCookie,
+  resolveUsed, encodeRefundToken,
 } from "@/lib/free-runs";
 import { hostedCapacityBreaker } from "@/lib/circuit-breaker";
 import { segmentRoles, computeWorkHistoryMetrics } from "@/lib/work-history";
@@ -384,6 +384,12 @@ export async function POST(req: NextRequest) {
   // instead of losing it to head-truncation.
   const jdText = clipJd(body.job_description, provider.budgets.jdChars);
 
+  // Computed before the stream so both the stream body (which mints the
+  // refund token on its terminal error path) and the response headers below
+  // (which still set the counter cookie) agree on the same charged-to count.
+  const secure = (req.headers.get("x-forwarded-proto") ?? "http") === "https";
+  const nextUsed = usingHosted ? hostedRunsUsed + 1 : 0;
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const warnings: string[] = [];
@@ -391,6 +397,14 @@ export async function POST(req: NextRequest) {
       const warn = (message: string) => {
         warnings.push(message);
         emit("warning", { message });
+      };
+      // The only place a refund token is minted. Every reachable error exit
+      // from this point on corresponds to a run the response headers already
+      // charged (Set-Cookie commits before this stream body runs), so every
+      // one of them gets a token; the `result` path never calls this, so a
+      // successful run has nothing to replay.
+      const emitError = (data: { error: string; code: string }) => {
+        emit("error", usingHosted ? { ...data, refund_token: encodeRefundToken(nextUsed, freeRunSecret) } : data);
       };
 
       try {
@@ -430,7 +444,7 @@ export async function POST(req: NextRequest) {
           // On the hosted path that key is ours, not the visitor's — telling
           // them to check a key they never entered is both wrong and
           // unfixable by them.
-          emit("error", {
+          emitError({
             error: usingHosted
               ? "Free analyses aren't working right now — this one's on us, not you. Add your own API key in Settings to keep going."
               : `Invalid ${provider.label} API key. Check your key and try again.`,
@@ -446,7 +460,7 @@ export async function POST(req: NextRequest) {
           (!jdOutcome.ok && jdOutcome.reason === "model_gone") ||
           (!errorsOutcome.ok && errorsOutcome.reason === "model_gone")
         ) {
-          emit("error", {
+          emitError({
             error: `${provider.label} no longer serves "${model}", so it cannot run an analysis. Pick a different model in Settings.`,
             code: "INVALID_REQUEST",
           });
@@ -462,7 +476,7 @@ export async function POST(req: NextRequest) {
           // User hitting their own quota must never take down the free path
           // for everyone else.
           if (quota && usingHosted) hostedCapacityBreaker.trip();
-          emit("error", {
+          emitError({
             error: quota
               ? `You've hit ${provider.label}'s rate or daily quota limit, so no model call could complete. Free-tier quotas reset on a daily cycle — wait and retry, or switch provider in Settings. (${detail.slice(0, 200)})`
               : `The model couldn't complete the analysis, even after retries. Try again in a minute, or switch models in Settings.${detail ? ` (${detail.slice(0, 200)})` : ""}`,
@@ -628,15 +642,12 @@ export async function POST(req: NextRequest) {
         controller.close();
       } catch (err) {
         console.error("[analyze]", err);
-        emit("error", { error: "Analysis failed. Please try again.", code: "UNKNOWN" });
+        emitError({ error: "Analysis failed. Please try again.", code: "UNKNOWN" });
         controller.close();
       }
     },
   });
 
-  // A Headers instance rather than a plain object: charging a run sets two
-  // cookies (the count, and a refund token proving this specific charge),
-  // and a plain object literal can only ever hold one value per key.
   const responseHeaders = new Headers({
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
@@ -646,12 +657,11 @@ export async function POST(req: NextRequest) {
   if (usingHosted) {
     // Set-Cookie can only be sent with the response headers, which are
     // written before the SSE body streams — so the run is charged up front.
-    // If the run terminates in an error, the client refunds it locally using
-    // the token below as proof the charge really happened.
-    const nextUsed = hostedRunsUsed + 1;
-    const secure = (req.headers.get("x-forwarded-proto") ?? "http") === "https";
+    // The refund token is NOT set here: at this point the server does not
+    // yet know whether the run will succeed, and a token minted for a run
+    // that goes on to succeed would have nothing legitimate to prove. It is
+    // minted only from inside the stream, on the terminal error path.
     responseHeaders.append("Set-Cookie", serializeFreeRunCookie(nextUsed, freeRunSecret, secure));
-    responseHeaders.append("Set-Cookie", serializeRefundTokenCookie(nextUsed, freeRunSecret, secure));
     responseHeaders.set("X-Free-Runs-Remaining", String(Math.max(0, FREE_RUN_LIMIT - nextUsed)));
   }
 

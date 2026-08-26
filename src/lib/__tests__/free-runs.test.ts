@@ -7,11 +7,9 @@ import {
   freeRunState,
   serializeFreeRunCookie,
   resolveUsed,
-  REFUND_TOKEN_COOKIE,
   encodeRefundToken,
   decodeRefundToken,
-  serializeRefundTokenCookie,
-  clearRefundTokenCookie,
+  refundTokenMatches,
 } from "../free-runs";
 
 const SECRET = "test-secret-value";
@@ -162,24 +160,48 @@ describe("refund token round trip", () => {
   });
 });
 
-describe("refund token cookie serialization", () => {
-  it("sets the hardening attributes and a bounded Max-Age", () => {
-    const c = serializeRefundTokenCookie(1, SECRET, true);
-    expect(c.startsWith(`${REFUND_TOKEN_COOKIE}=`)).toBe(true);
-    expect(c).toContain("HttpOnly");
-    expect(c).toContain("SameSite=Lax");
-    expect(c).toContain("Path=/");
-    expect(c).toContain("Secure");
-    expect(c).toContain("Max-Age=600");
+describe("refundTokenMatches", () => {
+  it("matches a valid token minted for exactly the current used count", () => {
+    const token = encodeRefundToken(1, SECRET);
+    expect(refundTokenMatches(token, SECRET, 1)).toBe(true);
   });
 
-  it("omits Secure when not on https", () => {
-    expect(serializeRefundTokenCookie(1, SECRET, false)).not.toContain("Secure");
+  it("refuses a token whose charged-to does not match the current used value", () => {
+    // Minted for a charge to 1, but presented when used is already back at 0
+    // (a replay after refund) or has moved on to 2 (a later charge).
+    const token = encodeRefundToken(1, SECRET);
+    expect(refundTokenMatches(token, SECRET, 0)).toBe(false);
+    expect(refundTokenMatches(token, SECRET, 2)).toBe(false);
   });
 
-  it("clears the cookie with Max-Age=0 so a spent token cannot be redeemed again", () => {
-    const c = clearRefundTokenCookie(true);
-    expect(c).toContain(`${REFUND_TOKEN_COOKIE}=;`);
-    expect(c).toContain("Max-Age=0");
+  it("is what makes a token single-use: it matches once, then stops matching after the used count it proves has moved", () => {
+    const token = encodeRefundToken(2, SECRET);
+    expect(refundTokenMatches(token, SECRET, 2)).toBe(true);
+    // used drops to 1 after the refund this token justified — the same
+    // token presented again no longer matches the new state.
+    expect(refundTokenMatches(token, SECRET, 1)).toBe(false);
+  });
+
+  it("refuses a forged, expired or malformed token regardless of used", () => {
+    expect(refundTokenMatches(encodeRefundToken(1, "other-secret"), SECRET, 1)).toBe(false);
+    const now = 1_000_000;
+    const expired = encodeRefundToken(1, SECRET, now);
+    expect(refundTokenMatches(expired, SECRET, 1, now + 601)).toBe(false);
+    for (const bad of ["garbage", "1.2", "1.2.3.4", ""]) {
+      expect(refundTokenMatches(bad, SECRET, 1)).toBe(false);
+    }
+  });
+
+  it("refuses a missing token", () => {
+    expect(refundTokenMatches(undefined, SECRET, 1)).toBe(false);
+    expect(refundTokenMatches(null, SECRET, 1)).toBe(false);
+  });
+
+  it("does not throw on hostile input", () => {
+    const hostile = ["garbage", ".", "1.", ".abc", "1.2.3", "NaN.deadbeef", "__proto__.1.x", "1.2.3.4.5"];
+    for (const bad of hostile) {
+      expect(() => refundTokenMatches(bad, SECRET, 1)).not.toThrow();
+      expect(() => decodeRefundToken(bad, SECRET)).not.toThrow();
+    }
   });
 });

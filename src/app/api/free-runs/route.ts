@@ -5,9 +5,7 @@ import {
   freeRunState,
   serializeFreeRunCookie,
   resolveUsed,
-  REFUND_TOKEN_COOKIE,
-  decodeRefundToken,
-  clearRefundTokenCookie,
+  refundTokenMatches,
 } from "@/lib/free-runs";
 import { analyzeLimiter, clientKey } from "@/lib/rate-limit";
 import type { ApiError, FreeRunsResponse } from "@/types/api";
@@ -54,10 +52,11 @@ export async function GET(req: NextRequest) {
 }
 
 // POST — refund one run. Called by the client when an analysis it paid for
-// terminated in an error. Requires the signed refund-token cookie /api/analyze
-// sets when it charges a run: without it, nothing is refunded. That token is
-// the only proof a run was ever charged, so a visitor cannot manufacture a
-// refund out of nothing — the previous version let two bare POSTs take any
+// terminated in an error. Requires the signed refund token /api/analyze's SSE
+// stream emits on its terminal error event (sent here as the x-refund-token
+// header): without it, nothing is refunded. That token is the only proof a
+// run was ever charged, so a visitor cannot manufacture a refund out of
+// nothing — a version that skipped this check let two bare POSTs take any
 // visitor from used=2 to used=0 with no charge behind either one.
 export async function POST(req: NextRequest) {
   const rateKey = clientKey(req.headers);
@@ -83,10 +82,14 @@ export async function POST(req: NextRequest) {
   const used = resolveUsed(cookieState.used, req.headers.get("x-free-runs-used"));
   const secure = isSecure(req);
 
-  const tokenValid = decodeRefundToken(req.cookies.get(REFUND_TOKEN_COOKIE)?.value, key) !== null;
-  if (!tokenValid) {
-    // No proof a run was charged — report the honest current state and
-    // refund nothing. This is the branch a farmed, token-less POST now hits.
+  // refundTokenMatches also enforces the token was minted for exactly this
+  // used count, not merely that it is validly signed and unexpired — see its
+  // doc comment for why that equality is what stops a replayed or
+  // wrong-charge token from refunding.
+  if (!refundTokenMatches(req.headers.get("x-refund-token"), key, used)) {
+    // No valid proof this specific charge happened — report the honest
+    // current state and refund nothing. This is the branch a farmed,
+    // token-less or replayed POST now hits.
     return noStore(
       NextResponse.json<FreeRunsResponse>({
         remaining: Math.max(0, FREE_RUN_LIMIT - used),
@@ -103,7 +106,5 @@ export async function POST(req: NextRequest) {
     available: true,
   });
   res.headers.append("Set-Cookie", serializeFreeRunCookie(refunded, key, secure));
-  // Clears the token so this same proof cannot redeem a second refund.
-  res.headers.append("Set-Cookie", clearRefundTokenCookie(secure));
   return noStore(res);
 }

@@ -85,7 +85,20 @@ export function resolveUsed(cookieUsed: number, hintedHeader: string | null | un
 // require it instead of being an unauthenticated decrement. Signed and
 // separate from the free-run cookie's own signature namespace (the "refund."
 // prefix) so a free-run cookie value can never be replayed as a token.
-export const REFUND_TOKEN_COOKIE = "rescheck_refund_token";
+//
+// This travels in the SSE stream body (the terminal `error` event), not a
+// response header/cookie: headers commit before the stream body runs, so at
+// charge time the server does not yet know whether the run will succeed. A
+// token minted then would exist even for successful runs, and a successful
+// run replaying it would refund a charge that was never a failure. Emitting
+// it only from the terminal error event means a successful run never
+// receives one, and POST /api/free-runs reads it from the request
+// (x-refund-token header) instead of an ambient cookie.
+//
+// "Single-use" falls out of the chargedTo === used check the caller must
+// run: after a refund, `used` drops below chargedTo, so replaying the same
+// token against the new state fails that comparison on its own — no separate
+// spent-token bookkeeping is needed.
 // Long enough to cover a slow stream failure plus the client's own refund
 // call; short enough that a saved token cannot mint a run much later.
 const REFUND_TOKEN_TTL_SECONDS = 600;
@@ -124,23 +137,19 @@ export function decodeRefundToken(
   return chargedTo;
 }
 
-export function serializeRefundTokenCookie(chargedTo: number, secret: string, secure: boolean): string {
-  const parts = [
-    `${REFUND_TOKEN_COOKIE}=${encodeRefundToken(chargedTo, secret)}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${REFUND_TOKEN_TTL_SECONDS}`,
-  ];
-  if (secure) parts.push("Secure");
-  return parts.join("; ");
-}
-
-// Sent after a token is redeemed so the same token cannot be presented
-// again — a normal browser drops the cookie immediately, and this is what
-// makes a second refund without a fresh charge a no-op.
-export function clearRefundTokenCookie(secure: boolean): string {
-  const parts = [`${REFUND_TOKEN_COOKIE}=`, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0"];
-  if (secure) parts.push("Secure");
-  return parts.join("; ");
+// True only when `raw` is a validly signed, unexpired token minted for
+// EXACTLY the charge that produced the current `used` count — not merely a
+// token that decodes to something. A token minted for an earlier charge
+// (chargedTo < used, e.g. the visitor ran and paid for a second analysis
+// since) or one replayed after its own refund already landed (used dropped
+// below chargedTo) both fail this equality, which is what makes presenting
+// the same token twice a no-op without any separate spent-token bookkeeping.
+export function refundTokenMatches(
+  raw: string | undefined | null,
+  secret: string,
+  used: number,
+  nowSeconds: number = Math.floor(Date.now() / 1000)
+): boolean {
+  const chargedTo = decodeRefundToken(raw, secret, nowSeconds);
+  return chargedTo !== null && chargedTo === used;
 }

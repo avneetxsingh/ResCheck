@@ -94,7 +94,11 @@ export function useAnalysis(
   freeRunLimit: number,
   onComplete?: (entry: HistoryEntry) => void,
   onFreeRunsRemaining?: (remaining: number) => void,
-  onHostedRunFailed?: () => void
+  // Takes the refund token off the terminal error event — a run that never
+  // reached that event (network drop, unreadable stream) has no token to
+  // offer, and refund() itself treats that as "nothing to refund" rather
+  // than firing a request the server can only refuse.
+  onHostedRunFailed?: (refundToken: string | undefined) => void
 ) {
   const [stage, setStage] = useState<AnalysisStage>("idle");
   const [progress, setProgress] = useState(0);
@@ -135,6 +139,9 @@ export function useAnalysis(
       // streams, so a pre-stream 400/403/503 never charged anything and must
       // never trigger a refund below.
       let chargedHostedRun = false;
+      // Declared outside the try block so the catch block below can still
+      // read whatever the terminal error event set before the throw.
+      let refundToken: string | undefined;
 
       try {
         // Step 1: Parse PDF
@@ -249,8 +256,11 @@ export function useAnalysis(
             } else if (evt.event === "result") {
               rawResult = (evt.data as { result?: unknown }).result ?? null;
             } else if (evt.event === "error") {
-              const d = evt.data as { error?: string };
+              const d = evt.data as { error?: string; refund_token?: string };
               streamError = typeof d.error === "string" ? d.error : "Analysis failed.";
+              // Absent on non-hosted runs and on any run the server never
+              // charged — optional by construction, never assumed present.
+              refundToken = typeof d.refund_token === "string" ? d.refund_token : undefined;
             }
           }
         }
@@ -284,8 +294,11 @@ export function useAnalysis(
         if (thisCall !== callCountRef.current) return; // stale error from old call
 
         // Only a charged run gets refunded — a 403 FREE_RUNS_EXHAUSTED or a
-        // 503 HOSTED_* response above never reached this point.
-        if (chargedHostedRun && usingHosted) onHostedRunFailed?.();
+        // 503 HOSTED_* response above never reached this point. refundToken
+        // may still be undefined here (e.g. the stream never reached a
+        // terminal error event) — onHostedRunFailed/refund() must treat an
+        // absent token as nothing to refund, not throw.
+        if (chargedHostedRun && usingHosted) onHostedRunFailed?.(refundToken);
 
         setStage("error");
         setProgress(0);
