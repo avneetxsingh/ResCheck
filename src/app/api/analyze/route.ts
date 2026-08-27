@@ -23,7 +23,13 @@ import type { ApiError } from "@/types/api";
 import type { JdRequirement, RawAnalysisResult } from "@/types/analysis";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Measured 2026-08-27 against a live provider: a clean run is ~20s, but a run
+// where one stage times out and retries took 67s — past the old 60s ceiling,
+// which on Vercel kills the request mid-stream after the visitor has already
+// been charged a free run. Worst case is now bounded by STAGE_TIMEOUT_MS:
+// AI-1 and AI-2 run in parallel with one retry each, then AI-3, so roughly
+// 3 x 2 x 45s. 300 is Vercel's current per-function ceiling.
+export const maxDuration = 300;
 
 // ── Request body ───────────────────────────────────────────────────────────
 // system_prompt is no longer accepted; zod strips unknown keys so old cached
@@ -183,7 +189,14 @@ function sse(event: string, data: unknown): Uint8Array {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
-// ── Stage call: 25s timeout, retry once at temp 0.2, rate-limit delay once ─
+// Per-call ceiling. 25s was too tight for a reasoning model: gpt-oss-120b's
+// thinking tokens share the output budget, so the résumé line audit exceeded
+// it, aborted, retried, and turned a 20s run into a 67s one — the timeout
+// meant as a safety net was itself the cause of the overrun. Measured, not
+// guessed; raise this only against a fresh measurement.
+const STAGE_TIMEOUT_MS = 45_000;
+
+// ── Stage call: retry once at temp 0.2, rate-limit delay once ──────────────
 type StageResult<T> =
   | { ok: true; data: T; actualModel: string }
   | { ok: false; reason: "auth" | "model_gone" | "failed"; detail?: string };
@@ -200,7 +213,7 @@ async function callStage<T>(opts: {
 }): Promise<StageResult<T>> {
   const attempt = async (temperature: number) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 25_000);
+    const timer = setTimeout(() => controller.abort(), STAGE_TIMEOUT_MS);
     try {
       return await opts.provider.complete(opts.apiKey, {
         model: opts.model,
