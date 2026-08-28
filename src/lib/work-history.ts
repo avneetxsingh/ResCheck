@@ -212,3 +212,96 @@ export function segmentRoles(structured: StructuredResume, raw: RawRole[]): Role
     return { employer: r.employer, title: r.title, range, text, anchored: true };
   });
 }
+
+// Gaps are reported at the same bar computeWorkHistoryMetrics uses. The two
+// calculations are deliberately kept in lockstep — see the agreement test in
+// work-history.test.ts.
+export const GAP_THRESHOLD_MONTHS = 6;
+
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+// Never fabricates precision the parse did not have: a year-precision date
+// renders as the bare year rather than guessing January.
+export function formatParsedDate(d: ParsedDate): string {
+  if (d.precision === "present") return "present";
+  if (d.year === null) return "an undated point";
+  if (d.precision === "year" || d.month === null) return String(d.year);
+  return `${MONTH_NAMES[d.month - 1]} ${d.year}`;
+}
+
+// The employer is what a candidate recognises; the title is the fallback when
+// the model reported no employer. Never returns "" — an empty name would
+// produce "between  and Globex".
+export function roleLabel(role: RoleBlock): string {
+  return role.employer.trim() || role.title || "an unnamed role";
+}
+
+export interface EmploymentGap {
+  months: number;
+  /** Title of the role that ended when the gap opened. */
+  role_before: string;
+  /** Title of the role that began when the gap closed. */
+  role_after: string;
+  ended_at: ParsedDate;
+  resumed_at: ParsedDate;
+}
+
+interface LabelledSpan {
+  from: number;
+  to: number;
+  label: string;
+  startDate: ParsedDate;
+  endDate: ParsedDate;
+}
+
+type DatedRole = RoleBlock & { range: { start: ParsedDate; end: ParsedDate } };
+
+// Deliberately NOT folded into computeWorkHistoryMetrics: that function is also
+// called on single ranges by keyword-match.ts, where a role label means nothing.
+export function computeEmploymentGaps(roles: RoleBlock[], now: Date = new Date()): EmploymentGap[] {
+  const spans: LabelledSpan[] = roles
+    .filter((r): r is DatedRole => r.range.start !== null && r.range.end !== null)
+    .map((r) => ({
+      from: toAbsoluteMonths(r.range.start, now),
+      to: toAbsoluteMonths(r.range.end, now),
+      label: roleLabel(r),
+      startDate: r.range.start,
+      endDate: r.range.end,
+    }))
+    .filter((s) => s.to >= s.from)
+    .sort((a, b) => a.from - b.from);
+
+  if (spans.length === 0) return [];
+
+  const gaps: EmploymentGap[] = [];
+  let current = { to: spans[0].to, label: spans[0].label, endDate: spans[0].endDate };
+
+  for (let i = 1; i < spans.length; i += 1) {
+    const span = spans[i];
+    if (span.from <= current.to) {
+      // Concurrent or overlapping roles are one continuous block; it ends
+      // whenever the longest-running of them ends.
+      if (span.to > current.to) {
+        current = { to: span.to, label: span.label, endDate: span.endDate };
+      }
+      continue;
+    }
+    // Endpoints are inclusive, so adjacent months (Dec then Jan) are a gap of 0.
+    const months = span.from - current.to - 1;
+    if (months > GAP_THRESHOLD_MONTHS) {
+      gaps.push({
+        months,
+        role_before: current.label,
+        role_after: span.label,
+        ended_at: current.endDate,
+        resumed_at: span.startDate,
+      });
+    }
+    current = { to: span.to, label: span.label, endDate: span.endDate };
+  }
+
+  return gaps;
+}

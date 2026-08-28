@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseResumeDate, computeWorkHistoryMetrics, segmentRoles } from "@/lib/work-history";
+import { parseResumeDate, computeWorkHistoryMetrics, segmentRoles, computeEmploymentGaps, formatParsedDate, type RoleBlock } from "@/lib/work-history";
 import { extractResumeStructure } from "@/lib/ats-extract";
 
 const NOW = new Date("2026-08-17T00:00:00Z");
@@ -201,5 +201,88 @@ Software Engineer, Acme — Jan 2018 to Dec 2020
     // unanchored rather than silently anchoring mid-role.
     expect(role.anchored).toBe(false);
     expect(role.text).toBe("");
+  });
+});
+
+describe("computeEmploymentGaps", () => {
+  const role = (employer: string, from: [number, number], to: [number, number]): RoleBlock => ({
+    employer,
+    title: `${employer} engineer`,
+    range: {
+      start: { year: from[0], month: from[1], precision: "month" },
+      end: { year: to[0], month: to[1], precision: "month" },
+    },
+    text: "",
+    anchored: false,
+  });
+
+  it("names the roles on either side of a gap and keeps their dates", () => {
+    const gaps = computeEmploymentGaps(
+      [role("Acme", [2021, 1], [2023, 3]), role("Globex", [2023, 11], [2024, 6])],
+      NOW
+    );
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].months).toBe(7);
+    expect(gaps[0].role_before).toBe("Acme");
+    expect(gaps[0].role_after).toBe("Globex");
+    expect(formatParsedDate(gaps[0].ended_at)).toBe("Mar 2023");
+    expect(formatParsedDate(gaps[0].resumed_at)).toBe("Nov 2023");
+  });
+
+  it("ignores a gap at or under the threshold", () => {
+    // Mar 2023 -> Sep 2023 is 5 clear months, under the 6-month bar.
+    const gaps = computeEmploymentGaps(
+      [role("Acme", [2021, 1], [2023, 3]), role("Globex", [2023, 9], [2024, 6])],
+      NOW
+    );
+    expect(gaps).toEqual([]);
+  });
+
+  it("does not invent a gap between overlapping roles", () => {
+    const gaps = computeEmploymentGaps(
+      [role("Acme", [2020, 1], [2024, 1]), role("Moonlight", [2021, 1], [2021, 6])],
+      NOW
+    );
+    expect(gaps).toEqual([]);
+  });
+
+  it("returns nothing when no role has parseable dates", () => {
+    const undated: RoleBlock = {
+      employer: "Acme", title: "Engineer",
+      range: { start: null, end: null }, text: "", anchored: false,
+    };
+    expect(computeEmploymentGaps([undated], NOW)).toEqual([]);
+  });
+
+  it("falls back to the title when the employer is blank", () => {
+    const blank = role("", [2023, 11], [2024, 6]);
+    const gaps = computeEmploymentGaps([role("Acme", [2021, 1], [2023, 3]), blank], NOW);
+    expect(gaps[0].role_after).toBe(blank.title);
+  });
+
+  // The two gap calculations must never disagree — one drives the signals
+  // panel, the other drives the questions, and a user seeing "1 gap" beside a
+  // question about a different gap would rightly stop trusting both.
+  it("agrees with the month counts computeWorkHistoryMetrics reports", () => {
+    const roles = [
+      role("Acme", [2018, 1], [2020, 2]),
+      role("Globex", [2021, 3], [2022, 1]),
+      role("Initech", [2023, 6], [2024, 6]),
+    ];
+    const viaGaps = computeEmploymentGaps(roles, NOW).map((g) => g.months);
+    const viaMetrics = computeWorkHistoryMetrics(roles.map((r) => r.range), NOW).gap_months;
+    expect(viaGaps).toEqual(viaMetrics);
+  });
+});
+
+describe("formatParsedDate", () => {
+  it("renders a month-precision date", () => {
+    expect(formatParsedDate({ year: 2023, month: 3, precision: "month" })).toBe("Mar 2023");
+  });
+  it("renders a year-precision date without inventing a month", () => {
+    expect(formatParsedDate({ year: 2023, month: null, precision: "year" })).toBe("2023");
+  });
+  it("renders an ongoing role as present", () => {
+    expect(formatParsedDate({ year: null, month: null, precision: "present" })).toBe("present");
   });
 });
