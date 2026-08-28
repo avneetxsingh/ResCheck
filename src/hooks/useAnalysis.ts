@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { AnalysisResult, RawAnalysisResult, LineError } from "@/types/analysis";
 import type { HistoryEntry } from "@/types/history";
-import type { ApiError } from "@/types/api";
+import type { ApiError, PartialAnalysis } from "@/types/api";
 import type { ProviderId } from "@/lib/providers/catalog";
 import { readFreeRunsUsedHint, writeFreeRunsUsedHint } from "@/lib/free-runs-storage";
 
@@ -103,6 +103,8 @@ export function useAnalysis(
   const [stage, setStage] = useState<AnalysisStage>("idle");
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  // The two gates that land ~18s before the rest. Cleared on every new run.
+  const [partial, setPartial] = useState<PartialAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
 
@@ -131,6 +133,7 @@ export function useAnalysis(
       setProgress(5);
       setError(null);
       setResult(null);
+      setPartial(null);
       setWarnings([]);
 
       const usingHosted = apiKey.trim().length === 0;
@@ -253,6 +256,10 @@ export function useAnalysis(
                 const message = d.message;
                 setWarnings((w) => [...w, message]);
               }
+            } else if (evt.event === "partial") {
+              // The same computation the terminal result carries, arriving
+              // early. It is never contradicted by the final result.
+              if (thisCall === callCountRef.current) setPartial(evt.data as PartialAnalysis);
             } else if (evt.event === "result") {
               rawResult = (evt.data as { result?: unknown }).result ?? null;
             } else if (evt.event === "error") {
@@ -311,6 +318,7 @@ export function useAnalysis(
   );
 
   const reset = useCallback(() => {
+    setPartial(null);
     abortControllerRef.current?.abort();
     setStage("idle");
     setProgress(0);
@@ -319,5 +327,5 @@ export function useAnalysis(
     setWarnings([]);
   }, []);
 
-  return { stage, progress, result, error, warnings, analyze, reset };
+  return { stage, progress, result, partial, error, warnings, analyze, reset };
 }

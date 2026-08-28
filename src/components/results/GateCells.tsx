@@ -1,11 +1,15 @@
 "use client";
 
-import type { FunnelResult, RetrieveGate } from "@/types/analysis";
+import type { KnockoutGate, ParseGate, RetrieveGate } from "@/types/analysis";
 import { cn } from "@/lib/utils";
 import { TONE_CLASS, type Tone } from "./FindingRow";
 
 interface GateCellsProps {
-  funnel: FunnelResult;
+  parse: ParseGate;
+  // null means this gate has not been computed yet — it depends on the slow
+  // stage. It renders as visibly still-resolving, never as a value.
+  knockout: KnockoutGate | null;
+  retrieve: RetrieveGate;
 }
 
 const PARSE_TONE: Record<string, Tone> = {
@@ -32,24 +36,28 @@ interface CellProps {
   label: string;
   value: string;
   tone: Tone;
+  pending?: boolean;
 }
 
-function Cell({ label, value, tone }: CellProps) {
+function Cell({ label, value, tone, pending = false }: CellProps) {
   return (
     <div className="border border-border rounded-lg px-3 py-2.5 bg-muted/40">
       <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
-      <div className={cn("font-mono text-sm font-semibold mt-1", TONE_CLASS[tone])}>
-        {value}
+      <div
+        className={cn(
+          "font-mono text-sm font-semibold mt-1",
+          pending ? "text-muted-foreground" : TONE_CLASS[tone]
+        )}
+      >
+        {pending ? <span className="opacity-70">checking…</span> : value}
       </div>
     </div>
   );
 }
 
-export function GateCells({ funnel }: GateCellsProps) {
-  const { parse, knockout, retrieve } = funnel;
-
+export function GateCells({ parse, knockout, retrieve }: GateCellsProps) {
   return (
     <div className="grid grid-cols-3 gap-2.5">
       <Cell
@@ -63,12 +71,17 @@ export function GateCells({ funnel }: GateCellsProps) {
       />
       <Cell
         label="Knockout"
-        tone={knockout.stated ? (VERDICT_TONE[knockout.verdict] ?? "unknown") : "unknown"}
+        pending={knockout === null}
+        tone={
+          knockout === null ? "unknown"
+            : knockout.stated ? (VERDICT_TONE[knockout.verdict] ?? "unknown") : "unknown"
+        }
         value={
-          !knockout.stated ? "Not stated"
-            : knockout.verdict === "pass" ? "Clears"
-              : knockout.verdict === "fail" ? "Blocked"
-                : "Check yourself"
+          knockout === null ? ""
+            : !knockout.stated ? "Not stated"
+              : knockout.verdict === "pass" ? "Clears"
+                : knockout.verdict === "fail" ? "Blocked"
+                  : "Check yourself"
         }
       />
       <Cell

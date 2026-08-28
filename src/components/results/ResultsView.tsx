@@ -15,9 +15,15 @@ import { SummaryPanel } from "./SummaryPanel";
 import { ExportButton } from "./ExportButton";
 import { LegacyResultsView } from "./LegacyResultsView";
 import type { AnalysisResult } from "@/types/analysis";
+import type { PartialAnalysis } from "@/types/api";
+import { Reveal } from "@/components/motion/Reveal";
+import { PendingPanel } from "./PendingPanel";
 
 interface ResultsViewProps {
-  result: AnalysisResult;
+  // null while a run is still in flight and only the early gates exist.
+  result: AnalysisResult | null;
+  // The two gates that are final as soon as AI-1 lands, ~18s before the rest.
+  partial: PartialAnalysis | null;
   onReset: () => void;
 }
 
@@ -35,7 +41,7 @@ const VERDICT_LABEL: Record<string, string> = {
   critical: "Critical",
 };
 
-export function ResultsView({ result, onReset }: ResultsViewProps) {
+export function ResultsView({ result, partial, onReset }: ResultsViewProps) {
   // Hooks must run in the same order on every render, so this stays above the
   // legacy early return — switching between a pre-funnel and a funnel-shaped
   // past run reuses this same mounted component.
@@ -43,19 +49,29 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
 
   // Pre-funnel entries have no gates to rank. They get their own view rather
   // than an empty shell where the gates would be.
-  if (!result.funnel) {
+  if (result && !result.funnel) {
     return <LegacyResultsView result={result} onReset={onReset} />;
   }
 
-  const funnel = result.funnel;
+  const funnel = result?.funnel ?? null;
+  // Prefer the settled funnel; fall back to the early gates while one is in
+  // flight. These never disagree — the partial carries the same computation,
+  // just sooner.
+  const parse = funnel?.parse ?? partial?.parse ?? null;
+  const retrieve = funnel?.retrieve ?? partial?.retrieve ?? null;
+  if (!parse || !retrieve) return null;
 
-  const parseReasons =
-    funnel.parse.verdict !== "clean" ? funnel.parse.reasons : [];
-  const blocking = funnel.knockout.checks.filter((c) => c.required && c.verdict === "fail");
-  const checkYourself = funnel.knockout.checks.filter(
-    (c) => c.required && c.verdict === "unverifiable"
-  );
-  const misses = funnel.retrieve.misses;
+  // A run that has not settled shows no verdict word. Deriving one from two of
+  // three gates would mean printing a judgement that could change seconds
+  // later, which is the one thing this app does not do.
+  const settled = result !== null && funnel !== null;
+
+  const parseReasons = parse.verdict !== "clean" ? parse.reasons : [];
+  const blocking = funnel ? funnel.knockout.checks.filter((c) => c.required && c.verdict === "fail") : [];
+  const checkYourself = funnel
+    ? funnel.knockout.checks.filter((c) => c.required && c.verdict === "unverifiable")
+    : [];
+  const misses = retrieve.misses;
 
   // One panel, not three hairlines: a résumé that will not parse, a stated
   // requirement it fails, and a search that will not surface it all cost the
@@ -64,27 +80,42 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
   // A blocked or invisible résumé leads with that, not with twelve writing nits.
   const hasUrgent = stoppingCount > 0 || checkYourself.length > 0;
 
-  const verdict = result.summary.verdict;
+  const verdict = result?.summary.verdict;
 
   // Section instances persist across a second analysis unless keyed off the
   // result, so a stale open/closed state would survive a fresh run — key by
   // the per-result timestamp to force remount.
-  const sectionKey = result.metadata.analyzed_at;
+  const sectionKey = result?.metadata.analyzed_at ?? "pending";
 
   return (
     <div ref={printRef} className="space-y-6">
+      <Reveal>
       <section className="rounded-xl border border-border bg-card px-5 py-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className={cn("font-mono text-3xl font-semibold tracking-tight", VERDICT_CLASS[verdict])}>
-              {VERDICT_LABEL[verdict] ?? "Moderate"}
-            </div>
-            <p className="text-sm text-muted-foreground mt-1.5 max-w-prose leading-relaxed">
-              {result.summary.headline}
-            </p>
+            {settled && verdict ? (
+              <>
+                <div className={cn("font-mono text-3xl font-semibold tracking-tight", VERDICT_CLASS[verdict])}>
+                  {VERDICT_LABEL[verdict] ?? "Moderate"}
+                </div>
+                <p className="text-sm text-muted-foreground mt-1.5 max-w-prose leading-relaxed">
+                  {result?.summary.headline}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="font-mono text-3xl font-semibold tracking-tight text-muted-foreground">
+                  Screening
+                </div>
+                <p className="text-sm text-muted-foreground mt-1.5 max-w-prose leading-relaxed">
+                  Two gates are in. Still reading your writing — the last check takes
+                  the longest.
+                </p>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <ExportButton result={result} targetRef={printRef} />
+            {result && <ExportButton result={result} targetRef={printRef} />}
             <Button variant="outline" size="sm" className="gap-2" onClick={onReset}>
               <RotateCcw className="w-3.5 h-3.5" />
               New run
@@ -93,13 +124,14 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
         </div>
 
         <div className="mt-5">
-          <GateCells funnel={funnel} />
+          <GateCells parse={parse} knockout={funnel?.knockout ?? null} retrieve={retrieve} />
         </div>
       </section>
+      </Reveal>
 
-      {result.warnings && result.warnings.length > 0 && (
+      {result?.warnings && result.warnings.length > 0 && (
         <ul className="space-y-1">
-          {result.warnings.map((w, i) => (
+          {result.warnings.map((w: string, i: number) => (
             <li key={i} className="text-xs text-state-warn flex gap-1.5">
               <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
               {w}
@@ -109,12 +141,13 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
       )}
 
       {stoppingCount > 0 && (
+        <Reveal delay={60}>
         <Panel title="What's stopping you" count={stoppingCount}>
           {parseReasons.map((r, i) => (
             <FindingRow
               key={`parse-${i}`}
               tag="PARSE"
-              tone={funnel.parse.verdict === "likely_breaks" ? "fail" : "warn"}
+              tone={parse.verdict === "likely_breaks" ? "fail" : "warn"}
             >
               {r}
             </FindingRow>
@@ -131,14 +164,16 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
           ))}
           {misses.length > 0 && (
             <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
-              Your résumé surfaces for {funnel.retrieve.surfaced} of the {funnel.retrieve.total}{" "}
-              {funnel.retrieve.total === 1 ? "search" : "searches"} a recruiter would plausibly run.
+              Your résumé surfaces for {retrieve.surfaced} of the {retrieve.total}{" "}
+              {retrieve.total === 1 ? "search" : "searches"} a recruiter would plausibly run.
             </p>
           )}
         </Panel>
+        </Reveal>
       )}
 
       {checkYourself.length > 0 && (
+        <Reveal delay={120}>
         <Panel title="Check yourself" count={checkYourself.length} quiet>
           {checkYourself.map((c, i) => (
             <FindingRow key={i} tag="ASK" tone="unknown" meta={c.type.replace(/_/g, " ")}>
@@ -154,16 +189,19 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
             </p>
           )}
         </Panel>
+        </Reveal>
       )}
 
-      <div className="space-y-1">
-        {result.errors.length > 0 && (
+      <Reveal delay={180} className="space-y-1">
+        {!settled && <PendingPanel title="Writing" lines={3} />}
+
+        {result && result.errors.length > 0 && (
           <Section key={`${sectionKey}-writing`} title="Writing" count={result.errors.length} defaultOpen={!hasUrgent}>
             <ErrorReportPanel errors={result.errors} />
           </Section>
         )}
 
-        {funnel.signals.length > 0 && (
+        {funnel && funnel.signals.length > 0 && (
           <Section key={`${sectionKey}-how-you-sort`} title="How you sort" count={funnel.signals.length} defaultOpen={!hasUrgent}>
             <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
               Nothing here is a rejection, and these are deliberately not combined into a
@@ -181,7 +219,7 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
           </Section>
         )}
 
-        {result.formatting_audit && (
+        {result?.formatting_audit && (
           <Section key={`${sectionKey}-ats`} title="What the ATS sees" defaultOpen={false}>
             <FormattingAuditPanel
               audit={result.formatting_audit}
@@ -190,14 +228,18 @@ export function ResultsView({ result, onReset }: ResultsViewProps) {
           </Section>
         )}
 
-        <Section key={`${sectionKey}-skills`} title="Skills" defaultOpen={false}>
-          <SkillsGapPanel skillsGap={result.skills_gap} />
-        </Section>
+        {result && (
+          <Section key={`${sectionKey}-skills`} title="Skills" defaultOpen={false}>
+            <SkillsGapPanel skillsGap={result.skills_gap} />
+          </Section>
+        )}
 
-        <Section key={`${sectionKey}-summary`} title="Summary" defaultOpen={false}>
-          <SummaryPanel summary={result.summary} metadata={result.metadata} />
-        </Section>
-      </div>
+        {result && (
+          <Section key={`${sectionKey}-summary`} title="Summary" defaultOpen={false}>
+            <SummaryPanel summary={result.summary} metadata={result.metadata} />
+          </Section>
+        )}
+      </Reveal>
     </div>
   );
 }

@@ -28,7 +28,7 @@ export function Workspace() {
     setRemaining: setFreeRunsRemaining,
     refund: refundFreeRun,
   } = useFreeRuns();
-  const { stage, progress, result, error, warnings, analyze, reset } = useAnalysis(
+  const { stage, progress, result, partial, error, warnings, analyze, reset } = useAnalysis(
     apiKey,
     settings.provider,
     settings.model,
@@ -168,10 +168,11 @@ export function Workspace() {
         />
       )}
 
-      {shown && (
-        <div className="p-5">
+      {(shown || partial) && (
+        <div className="p-6">
           <ResultsView
             result={shown}
+            partial={viewing ? null : partial}
             onReset={() => { reset(); setViewingId(null); setRailOpen(true); }}
           />
         </div>

@@ -18,8 +18,11 @@ import {
 } from "@/lib/free-runs";
 import { hostedCapacityBreaker } from "@/lib/circuit-breaker";
 import { segmentRoles, computeWorkHistoryMetrics } from "@/lib/work-history";
-import { buildFunnel, deriveFunnelVerdict, normalizeRequirementType } from "@/lib/funnel";
-import type { ApiError } from "@/types/api";
+import {
+  buildFunnel, deriveFunnelVerdict, normalizeRequirementType,
+  evaluateParseGate, evaluateRetrieveGate,
+} from "@/lib/funnel";
+import type { ApiError, PartialAnalysis } from "@/types/api";
 import type { JdRequirement, RawAnalysisResult } from "@/types/analysis";
 
 export const runtime = "nodejs";
@@ -447,6 +450,25 @@ export async function POST(req: NextRequest) {
 
         const jdOutcome = await jdPromise;
         emit("stage", { stage: "errors", progress: 50 });
+
+        // Two of the three gates are final the moment AI-1 lands, and AI-2 can
+        // take another 15-80s (measured 2026-08-27). Holding a finished answer
+        // back for a stage it does not depend on is just making the user wait.
+        //
+        // Only these two. Gate 2 needs work history, which comes out of AI-2 —
+        // see PartialAnalysis for why a partial knockout would be a fabricated
+        // answer rather than an early one.
+        if (jdOutcome.ok) {
+          const earlyJd = jdOutcome.data;
+          const earlyMustHave = earlyJd.must_have.filter((n) => !isNegatedInJd(n, jdText));
+          emit("partial", {
+            parse: evaluateParseGate(structured, audit),
+            retrieve: evaluateRetrieveGate(earlyMustHave, resumeText),
+            ats_extraction: atsExtraction,
+            jd_quality: earlyJd.jd_quality,
+          } satisfies PartialAnalysis);
+        }
+
         const errorsOutcome = await errorsPromise;
         emit("stage", { stage: "scoring", progress: 70 });
 

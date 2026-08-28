@@ -1,4 +1,4 @@
-import type { RawAnalysisResult } from "./analysis";
+import type { AtsExtraction, ParseGate, RawAnalysisResult, RetrieveGate } from "./analysis";
 
 export interface ParsePdfResponse {
   text: string;
@@ -40,4 +40,19 @@ export interface FreeRunsResponse {
   // "there were never any free runs here", and would tell a first-time visitor
   // they had used an allowance they never had.
   available: boolean;
+}
+
+// Streamed once, as soon as AI-1 resolves — roughly 1s into a run that takes
+// 25-83s. It carries ONLY the gates that are final at that moment.
+//
+// Gate 2 (knockout) is deliberately absent. Its years-experience check and the
+// competitiveness signals are computed from work history, which comes out of
+// AI-2 — the slow stage. Emitting a knockout verdict here would mean deriving
+// it from a subset of its inputs and possibly contradicting it seconds later,
+// which invariant 1 forbids. The UI shows that gate as still resolving.
+export interface PartialAnalysis {
+  parse: ParseGate;
+  retrieve: RetrieveGate;
+  ats_extraction?: AtsExtraction;
+  jd_quality?: "rich" | "moderate" | "sparse";
 }
