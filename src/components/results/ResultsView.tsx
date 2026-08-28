@@ -11,6 +11,7 @@ import { Section } from "./Section";
 import { ErrorReportPanel } from "./ErrorReportPanel";
 import { FormattingAuditPanel } from "./FormattingAuditPanel";
 import { SkillsGapPanel } from "./SkillsGapPanel";
+import { AmbushKitPanel } from "./AmbushKitPanel";
 import { SummaryPanel } from "./SummaryPanel";
 import { ExportButton } from "./ExportButton";
 import { LegacyResultsView } from "./LegacyResultsView";
@@ -194,6 +195,17 @@ export function ResultsView({ result, partial, onReset }: ResultsViewProps) {
 
       <Reveal delay={180} className="space-y-1">
         {!settled && <PendingPanel title="Writing" lines={3} />}
+
+        {settled && (
+          <Section
+            key={`${sectionKey}-questions`}
+            title="Questions this résumé invites"
+            count={result?.ambush_kit?.questions.length}
+            defaultOpen={!hasUrgent}
+          >
+            <AmbushKitPanel kit={result?.ambush_kit} />
+          </Section>
+        )}
 
         {result && result.errors.length > 0 && (
           <Section key={`${sectionKey}-writing`} title="Writing" count={result.errors.length} defaultOpen={!hasUrgent}>
