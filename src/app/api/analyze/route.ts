@@ -17,7 +17,8 @@ import {
   resolveUsed, encodeRefundToken,
 } from "@/lib/free-runs";
 import { hostedCapacityBreaker } from "@/lib/circuit-breaker";
-import { segmentRoles, computeWorkHistoryMetrics } from "@/lib/work-history";
+import { segmentRoles, computeWorkHistoryMetrics, computeEmploymentGaps } from "@/lib/work-history";
+import { buildAmbushKit } from "@/lib/ambush-kit";
 import {
   buildFunnel, deriveFunnelVerdict, normalizeRequirementType,
   evaluateParseGate, evaluateRetrieveGate,
@@ -589,6 +590,16 @@ export async function POST(req: NextRequest) {
         // overall score it used to be bracketed from.
         const verdict = deriveFunnelVerdict(funnel);
 
+        // Computed here rather than at render time: the dated work history is
+        // not carried in AnalysisResult, so a stored result does not contain
+        // the inputs this needs.
+        const ambushKit = buildAmbushKit({
+          gaps: computeEmploymentGaps(roles),
+          mustHave,
+          knockout: funnel.knockout,
+          metrics: workMetrics,
+        });
+
         // Stage 5 — AI-3 summary from a compact factual digest
         emit("stage", { stage: "summary", progress: 85 });
         const sc = scoring.scorecard;
@@ -661,6 +672,7 @@ export async function POST(req: NextRequest) {
           formatting_audit: audit,
           ats_extraction: atsExtraction,
           funnel,
+          ambush_kit: ambushKit,
           warnings,
           summary,
           metadata: {

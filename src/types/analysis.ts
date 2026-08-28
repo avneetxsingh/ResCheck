@@ -246,6 +246,7 @@ export interface RawAnalysisResult {
   formatting_audit: FormattingAudit;
   ats_extraction?: AtsExtraction;
   funnel?: FunnelResult; // optional — absent in history entries written before the funnel
+  ambush_kit?: AmbushKit; // optional — absent in history entries written before Phase 4
   warnings?: string[];
   summary: ExecutiveSummary;
   metadata: Omit<AnalysisResult["metadata"], "analyzed_at">;
