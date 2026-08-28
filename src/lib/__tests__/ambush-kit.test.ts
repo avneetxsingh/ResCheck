@@ -49,6 +49,7 @@ describe("buildAmbushKit — triggers", () => {
     const kit = buildAmbushKit({ ...base, mustHave: [SKILL({ strength: "weak" })] });
     expect(kit.questions[0].key).toBe("unevidenced_skill");
     expect(kit.questions[0].question).toContain("Kubernetes");
+    expect(kit.questions[0].evidence).toContain("Kubernetes appears in your résumé");
     expect(kit.questions[0].evidence).toContain("No dated role evidences it");
   });
 
@@ -122,6 +123,42 @@ describe("buildAmbushKit — ordering and volume", () => {
     // rolls 12 over to "1 year", which would make this assert the formatter's
     // rollover rule instead of the cap's ordering.
     expect(kit.questions[0].question).toContain("11 months");
+  });
+
+  it("overflows the global cap and keeps only the most expensive questions, in order", () => {
+    // Every trigger maxed out at once: 2 knockout + 3 gaps + 3 unevidenced +
+    // 1 tenure + 2 stale = 11 candidate questions, well past MAX_QUESTIONS(6).
+    // The old test's 3-gap + 3-unevidenced fixture could only ever total 6, so
+    // it could never actually exercise the cap slicing anything off.
+    const knockout: KnockoutGate = {
+      verdict: "fail",
+      stated: true,
+      checks: [
+        { type: "years_experience", value: "8", required: true, verdict: "fail", detail: "Resume shows 5 years." },
+        { type: "certification", value: "PMP", required: true, verdict: "fail", detail: "Not found." },
+      ],
+    };
+    const gaps = Array.from({ length: 5 }, (_, i) => ({ ...GAP, months: 7 + i }));
+    const mustHave = [
+      SKILL({ name: "W1", strength: "weak" }),
+      SKILL({ name: "W2", strength: "weak" }),
+      SKILL({ name: "W3", strength: "weak" }),
+      SKILL({ name: "S1", strength: "strong", last_used_months_ago: 40 }),
+      SKILL({ name: "S2", strength: "strong", last_used_months_ago: 40 }),
+    ];
+    const kit = buildAmbushKit({
+      ...base,
+      knockout,
+      gaps,
+      mustHave,
+      metrics: METRICS({ avg_tenure_months: 10 }),
+    });
+    expect(kit.questions).toHaveLength(6);
+    expect(kit.questions.map((q) => q.key)).toEqual([
+      "failed_knockout", "failed_knockout",
+      "employment_gap", "employment_gap", "employment_gap",
+      "unevidenced_skill",
+    ]);
   });
 
   it("still asks about a stale skill whose unevidenced question was capped out", () => {

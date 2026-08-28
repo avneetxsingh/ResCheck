@@ -20,35 +20,47 @@ export function AmbushKitPanel({ kit }: AmbushKitPanelProps) {
     );
   }
 
+  // Kept as one string in both branches: a reader who sees questions must not be
+  // left thinking gaps and tenure were checked and came back clean.
+  const DATES_UNREADABLE =
+    "We couldn't read the dates on your roles, so gaps and tenure went unchecked.";
+
   if (kit.questions.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
         {kit.dates_unreadable
-          ? "We couldn't read the dates on your roles, so gaps and tenure went unchecked. That isn't a clean bill — it's an unread one."
+          ? `${DATES_UNREADABLE} That isn't a clean bill — it's an unread one.`
           : "Nothing in this résumé invites an obvious question."}
       </p>
     );
   }
 
   return (
-    <ol className="flex flex-col gap-5">
-      {kit.questions.map((q, i) => (
-        // Reveal renders a <div>, so it sits INSIDE the <li> rather than around
-        // it: a wrapper between <ol> and <li> stops screen readers announcing
-        // this as a list.
-        <li key={`${q.key}-${i}`} className="border-l-2 border-border pl-4">
-          <Reveal delay={i * 40}>
-            <p className="text-sm leading-relaxed">{q.question}</p>
-            <ul className="mt-1.5 flex flex-col gap-0.5">
-              {q.evidence.map((e, j) => (
-                <li key={`${j}-${e}`} className="font-mono text-xs text-muted-foreground">
-                  {e}
-                </li>
-              ))}
-            </ul>
-          </Reveal>
-        </li>
-      ))}
-    </ol>
+    <>
+      {kit.dates_unreadable && (
+        <p className="mb-4 text-sm text-muted-foreground">
+          {DATES_UNREADABLE} The questions below come from what we could read.
+        </p>
+      )}
+      <ol className="flex flex-col gap-5">
+        {kit.questions.map((q, i) => (
+          // Reveal renders a <div>, so it sits INSIDE the <li> rather than around
+          // it: a wrapper between <ol> and <li> stops screen readers announcing
+          // this as a list.
+          <li key={`${q.key}-${i}`} className="border-l-2 border-border pl-4">
+            <Reveal delay={i * 40}>
+              <p className="text-sm leading-relaxed">{q.question}</p>
+              <ul className="mt-1.5 flex flex-col gap-0.5">
+                {q.evidence.map((e, j) => (
+                  <li key={`${j}-${e}`} className="font-mono text-xs text-muted-foreground">
+                    {e}
+                  </li>
+                ))}
+              </ul>
+            </Reveal>
+          </li>
+        ))}
+      </ol>
+    </>
   );
 }

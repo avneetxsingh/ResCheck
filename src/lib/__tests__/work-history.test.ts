@@ -282,6 +282,28 @@ describe("computeEmploymentGaps", () => {
     const viaMetrics = computeWorkHistoryMetrics(roles.map((r) => r.range), NOW).gap_months;
     expect(viaGaps).toEqual(viaMetrics);
   });
+
+  // A test built only from gaps well clear of the bar (13, 16 months) would
+  // pass for any threshold from 0 to 12 and could not catch a drift between
+  // the two functions' hardcoded comparisons. Exercising exactly 6 (excluded)
+  // and exactly 7 (included) pins the real boundary.
+  it("agrees with computeWorkHistoryMetrics at the exact gap-threshold boundary", () => {
+    // Feb 2020 -> Sep 2020 leaves Mar-Aug idle: exactly 6 clear months, at the
+    // bar, must be excluded from both.
+    const atBar = [role("Acme", [2018, 1], [2020, 2]), role("Globex", [2020, 9], [2021, 1])];
+    expect(computeEmploymentGaps(atBar, NOW)).toEqual([]);
+    expect(
+      computeWorkHistoryMetrics(atBar.map((r) => r.range), NOW).gap_months
+    ).toEqual([]);
+
+    // Feb 2020 -> Oct 2020 leaves Mar-Sep idle: exactly 7 clear months, one
+    // past the bar, must be included in both.
+    const overBar = [role("Acme", [2018, 1], [2020, 2]), role("Globex", [2020, 10], [2021, 1])];
+    const viaGaps = computeEmploymentGaps(overBar, NOW).map((g) => g.months);
+    const viaMetrics = computeWorkHistoryMetrics(overBar.map((r) => r.range), NOW).gap_months;
+    expect(viaGaps).toEqual([7]);
+    expect(viaMetrics).toEqual([7]);
+  });
 });
 
 describe("formatParsedDate", () => {

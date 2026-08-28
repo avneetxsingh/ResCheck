@@ -3,14 +3,11 @@
 // by this file and selected by trigger — the model is never asked what to ask,
 // because a model-authored question would be exactly the invented judgement
 // this product removed everywhere else.
-import { monthsLabel } from "./funnel";
+import { monthsLabel, STALE_MONTHS } from "./funnel";
 import { formatParsedDate, type EmploymentGap, type WorkHistoryMetrics } from "./work-history";
 import type { AmbushKit, AmbushQuestion, AmbushTrigger, KnockoutGate, Skill } from "@/types/analysis";
 
 const SHORT_TENURE_MONTHS = 18;
-// Matches funnel.ts's STALE_MONTHS so the signals panel and the questions
-// cannot disagree about what "stale" means.
-const STALE_MONTHS = 24;
 
 const MAX_QUESTIONS = 6;
 const MAX_GAPS = 3;
@@ -72,7 +69,7 @@ function unevidencedQuestions(mustHave: Skill[]): AmbushQuestion[] {
     .map((s) => ({
       key: "unevidenced_skill" as const,
       question: `You list ${s.name}, but no dated role shows it. Where did you use it?`,
-      evidence: [`${s.name} appears in your skills list`, "No dated role evidences it"],
+      evidence: [`${s.name} appears in your résumé`, "No dated role evidences it"],
     }));
 }
 
@@ -94,7 +91,11 @@ function staleQuestions(mustHave: Skill[], alreadyAsked: Set<string>): AmbushQue
       const ago = s.last_used_months_ago;
       if (typeof ago !== "number" || ago <= STALE_MONTHS) return [];
       // One skill must not generate two questions; the unevidenced question is
-      // the stronger of the two and has already been asked.
+      // the stronger of the two and has already been asked. Currently
+      // unreachable in production: keyword-match.ts sets strength "weak" only
+      // when a skill has no matched roles, and that same branch forces
+      // last_used_months_ago to null, so a "weak" skill can never also be
+      // "stale". Kept as a defensive guard in case that coupling changes.
       if (alreadyAsked.has(s.name)) return [];
       return [
         {
@@ -121,6 +122,9 @@ export function buildAmbushKit(input: AmbushKitInput): AmbushKit {
       .map((s) => s.name)
   );
 
+  // The concatenation below is already written in TRIGGER_ORDER order, so this
+  // sort is currently a no-op. Kept so ordering stays correct if that
+  // concatenation order is ever edited without updating TRIGGER_ORDER too.
   const questions = [
     ...knockoutQuestions(knockout),
     ...gapQuestions(gaps),

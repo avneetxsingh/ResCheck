@@ -61,6 +61,11 @@ function toAbsoluteMonths(d: ParsedDate, now: Date): number {
   return (d.year ?? 0) * 12 + (d.month ?? 1);
 }
 
+// Gaps are reported at the same bar computeEmploymentGaps uses. The two
+// calculations are deliberately kept in lockstep — see the agreement test in
+// work-history.test.ts.
+export const GAP_THRESHOLD_MONTHS = 6;
+
 export function computeWorkHistoryMetrics(ranges: DateRange[], now: Date = new Date()): WorkHistoryMetrics {
   const nowAbs = now.getUTCFullYear() * 12 + (now.getUTCMonth() + 1);
 
@@ -86,7 +91,7 @@ export function computeWorkHistoryMetrics(ranges: DateRange[], now: Date = new D
     if (last) {
       // Endpoints are inclusive, so adjacent months (Dec then Jan) are a gap of 0.
       const gap = span.from - last.to - 1;
-      if (gap > 6) gaps.push(gap);
+      if (gap > GAP_THRESHOLD_MONTHS) gaps.push(gap);
     }
     merged.push({ ...span });
   }
@@ -212,11 +217,6 @@ export function segmentRoles(structured: StructuredResume, raw: RawRole[]): Role
     return { employer: r.employer, title: r.title, range, text, anchored: true };
   });
 }
-
-// Gaps are reported at the same bar computeWorkHistoryMetrics uses. The two
-// calculations are deliberately kept in lockstep — see the agreement test in
-// work-history.test.ts.
-export const GAP_THRESHOLD_MONTHS = 6;
 
 const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",

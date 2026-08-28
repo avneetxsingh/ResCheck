@@ -315,7 +315,9 @@ export function evaluateRetrieveGate(mustHaveNames: string[], resumeText: string
 
 // A skill last used more than two years ago sorts below the same skill used
 // recently. Matches the RECENT_MONTHS threshold evidence scoring already uses.
-const STALE_MONTHS = 24;
+// Exported so ambush-kit.ts's question trigger reads the same constant rather
+// than keeping its own copy that could drift.
+export const STALE_MONTHS = 24;
 
 export interface SignalsInput {
   mustHave: Skill[];
