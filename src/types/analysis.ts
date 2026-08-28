@@ -192,6 +192,31 @@ export interface FunnelResult {
   signals: CompetitivenessSignal[];
 }
 
+export type AmbushTrigger =
+  | "failed_knockout"
+  | "employment_gap"
+  | "unevidenced_skill"
+  | "short_tenure"
+  | "stale_skill";
+
+export interface AmbushQuestion {
+  key: AmbushTrigger;
+  /** Phrased as an interviewer would ask it. Code-owned; never model-generated. */
+  question: string;
+  /** Computed values only — never a claim about what a reader will think. */
+  evidence: string[];
+}
+
+export interface AmbushKit {
+  questions: AmbushQuestion[];
+  /**
+   * True when no role dates parsed, so gaps and tenure went unchecked. An empty
+   * `questions` with this true means "not measured", NOT "nothing to ask" — the
+   * consumer must render those two as different sentences.
+   */
+  dates_unreadable: boolean;
+}
+
 export interface AnalysisResult {
   scorecard: Scorecard;
   skills_gap: SkillsGapAnalysis;
@@ -199,6 +224,7 @@ export interface AnalysisResult {
   formatting_audit?: FormattingAudit; // optional — absent in pre-existing history entries
   ats_extraction?: AtsExtraction; // optional — absent in pre-v2 history entries
   funnel?: FunnelResult; // optional — absent in history entries written before the funnel
+  ambush_kit?: AmbushKit; // optional — absent in history entries written before Phase 4
   warnings?: string[]; // degraded-stage warnings — absent in pre-v2 history entries
   summary: ExecutiveSummary;
   metadata: {
