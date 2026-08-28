@@ -15,18 +15,20 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ResCheck — does your resume pass?",
+  title: "ResCheck — does your résumé survive screening?",
   description:
-    "Check a résumé against a job posting: whether it parses, whether you meet the stated requirements, and whether a recruiter's search would find you. Bring your own API key; nothing is stored.",
+    "Check a résumé against a job posting: whether it parses, whether it meets the stated requirements, and whether a recruiter's search would surface it. Two free checks, no account, nothing kept.",
   openGraph: {
     title: "ResCheck",
-    description: "Check a résumé against a job posting before you apply.",
+    description:
+      "Find out what screening actually does to your résumé. No score, no guessing — only what can be computed.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "ResCheck",
-    description: "Check a résumé against a job posting before you apply.",
+    description:
+      "Find out what screening actually does to your résumé. No score, no guessing — only what can be computed.",
   },
 };
 
