@@ -5,8 +5,9 @@
 // spec's "soft cap"). The bound that actually protects the bill is the
 // provider-side spend ceiling, configured outside this codebase.
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { FREE_RUN_LIMIT } from "./free-run-limit";
 
-export const FREE_RUN_LIMIT = 2;
+export { FREE_RUN_LIMIT };
 export const FREE_RUN_COOKIE = "rescheck_free_runs";
 
 export interface FreeRunState {
