@@ -89,7 +89,7 @@ export function Workspace() {
 
   return (
     <div className="mx-auto w-full max-w-5xl">
-      <header className="flex items-center justify-between px-5 py-3 border-b border-border">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-border">
         <span className="font-mono text-sm font-semibold tracking-tight">ResCheck</span>
         <div className="flex items-center gap-1">
           {mounted && (

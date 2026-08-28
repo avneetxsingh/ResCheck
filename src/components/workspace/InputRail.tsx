@@ -42,9 +42,9 @@ export function InputRail({
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); onSubmit(); }}
-      className="space-y-5 p-5 border-b border-border"
+      className="space-y-7 px-6 py-8 border-b border-border"
     >
-      <p className="text-sm text-muted-foreground max-w-prose leading-relaxed">
+      <p className="text-[length:var(--step--1)] text-muted-foreground max-w-prose leading-relaxed">
         Check a résumé against a job posting. ResCheck reports what it can actually
         derive — whether the document parses, whether you meet the stated requirements,
         and whether a recruiter&apos;s search would find you. It does not score you.
@@ -99,11 +99,9 @@ export function InputRail({
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <div className="space-y-2">
-          <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            Résumé
-          </p>
+          <p className="text-sm font-medium">Résumé</p>
           <ResumeUploader
             file={file}
             onFileAccepted={onFileAccepted}
@@ -141,7 +139,7 @@ export function InputRail({
         </Alert>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 pt-1">
         <Button type="submit" disabled={!canSubmit}>
           {isRunning ? "Analysing…" : "Analyse"}
         </Button>
