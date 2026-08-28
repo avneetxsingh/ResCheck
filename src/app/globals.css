@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./motion.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -43,90 +44,125 @@
   --color-state-warn: var(--state-warn);
   --color-state-fail: var(--state-fail);
   --color-state-unknown: var(--state-unknown);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --radius-sm: calc(var(--radius) * 0.45);
+  --radius-md: calc(var(--radius) * 0.65);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-xl: calc(var(--radius) * 1.25);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 :root {
-  --background: oklch(0.99 0.002 250);
-  --foreground: oklch(0.16 0.01 250);
+  /* Warm neutrals: hue ~55-65 (sand), low chroma. The ground is warm; cards
+     lift off it in near-white so data still sits on a clean surface. */
+  --background: oklch(0.985 0.006 65);
+  --foreground: oklch(0.20 0.014 50);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.16 0.01 250);
+  --card-foreground: oklch(0.20 0.014 50);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.16 0.01 250);
-  --primary: oklch(0.52 0.14 150);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.004 250);
-  --secondary-foreground: oklch(0.2 0.01 250);
-  --muted: oklch(0.96 0.004 250);
-  --muted-foreground: oklch(0.5 0.01 250);
-  --accent: oklch(0.96 0.004 250);
-  --accent-foreground: oklch(0.2 0.01 250);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.16 0.01 250 / 10%);
-  --input: oklch(0.16 0.01 250 / 12%);
-  --ring: oklch(0.52 0.14 150);
+  --popover-foreground: oklch(0.20 0.014 50);
+  /* Espresso, not green. The old primary sat at the same hue as --state-pass,
+     so a button and a passing gate read as the same thing. A warm near-black
+     action colour cannot collide with any state. */
+  --primary: oklch(0.24 0.02 45);
+  --primary-foreground: oklch(0.98 0.006 65);
+  --secondary: oklch(0.955 0.008 65);
+  --secondary-foreground: oklch(0.24 0.016 50);
+  --muted: oklch(0.955 0.008 65);
+  --muted-foreground: oklch(0.52 0.016 55);
+  --accent: oklch(0.955 0.008 65);
+  --accent-foreground: oklch(0.24 0.016 50);
+  --destructive: oklch(0.55 0.19 28);
+  --border: oklch(0.20 0.014 50 / 11%);
+  --input: oklch(0.20 0.014 50 / 14%);
+  --ring: oklch(0.24 0.02 45);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.16 0.01 250);
-  --sidebar-primary: oklch(0.52 0.14 150);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.96 0.004 250);
-  --sidebar-accent-foreground: oklch(0.2 0.01 250);
-  --sidebar-border: oklch(0.16 0.01 250 / 10%);
-  --sidebar-ring: oklch(0.52 0.14 150);
-  --state-pass: oklch(0.55 0.14 150);
-  --state-warn: oklch(0.62 0.14 75);
-  --state-fail: oklch(0.58 0.20 25);
-  --state-unknown: oklch(0.5 0.01 250);
+  --radius: 1.125rem;
+  --sidebar: oklch(0.985 0.006 65);
+  --sidebar-foreground: oklch(0.20 0.014 50);
+  --sidebar-primary: oklch(0.24 0.02 45);
+  --sidebar-primary-foreground: oklch(0.98 0.006 65);
+  --sidebar-accent: oklch(0.955 0.008 65);
+  --sidebar-accent-foreground: oklch(0.24 0.016 50);
+  --sidebar-border: oklch(0.20 0.014 50 / 11%);
+  --sidebar-ring: oklch(0.24 0.02 45);
+  /* State stays legible and distinct. unverifiable is grey and never amber —
+     an unknown must not read as a near-miss. */
+  --state-pass: oklch(0.52 0.13 155);
+  --state-warn: oklch(0.60 0.14 70);
+  --state-fail: oklch(0.55 0.19 28);
+  --state-unknown: oklch(0.55 0.015 60);
 }
 
 .dark {
-  --background: oklch(0.135 0.008 250);
-  --foreground: oklch(0.95 0.005 250);
-  --card: oklch(0.175 0.008 250);
-  --card-foreground: oklch(0.95 0.005 250);
-  --popover: oklch(0.175 0.008 250);
-  --popover-foreground: oklch(0.95 0.005 250);
-  --primary: oklch(0.72 0.17 150);
-  --primary-foreground: oklch(0.15 0.03 150);
-  --secondary: oklch(0.22 0.008 250);
-  --secondary-foreground: oklch(0.95 0.005 250);
-  --muted: oklch(0.22 0.008 250);
-  --muted-foreground: oklch(0.68 0.01 250);
-  --accent: oklch(0.22 0.008 250);
-  --accent-foreground: oklch(0.95 0.005 250);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.72 0.17 150);
+  --background: oklch(0.165 0.012 50);
+  --foreground: oklch(0.94 0.008 65);
+  --card: oklch(0.205 0.013 50);
+  --card-foreground: oklch(0.94 0.008 65);
+  --popover: oklch(0.205 0.013 50);
+  --popover-foreground: oklch(0.94 0.008 65);
+  /* Inverted: on a warm dark ground the action reads as warm light. */
+  --primary: oklch(0.93 0.01 65);
+  --primary-foreground: oklch(0.19 0.014 50);
+  --secondary: oklch(0.245 0.012 50);
+  --secondary-foreground: oklch(0.94 0.008 65);
+  --muted: oklch(0.245 0.012 50);
+  --muted-foreground: oklch(0.70 0.014 60);
+  --accent: oklch(0.245 0.012 50);
+  --accent-foreground: oklch(0.94 0.008 65);
+  --destructive: oklch(0.70 0.18 28);
+  --border: oklch(0.94 0.008 65 / 12%);
+  --input: oklch(0.94 0.008 65 / 15%);
+  --ring: oklch(0.93 0.01 65);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.175 0.008 250);
-  --sidebar-foreground: oklch(0.95 0.005 250);
-  --sidebar-primary: oklch(0.72 0.17 150);
-  --sidebar-primary-foreground: oklch(0.15 0.03 150);
-  --sidebar-accent: oklch(0.22 0.008 250);
-  --sidebar-accent-foreground: oklch(0.95 0.005 250);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.72 0.17 150);
-  --state-pass: oklch(0.72 0.16 150);
-  --state-warn: oklch(0.78 0.15 75);
-  --state-fail: oklch(0.68 0.19 25);
-  --state-unknown: oklch(0.65 0.01 250);
+  --sidebar: oklch(0.205 0.013 50);
+  --sidebar-foreground: oklch(0.94 0.008 65);
+  --sidebar-primary: oklch(0.93 0.01 65);
+  --sidebar-primary-foreground: oklch(0.19 0.014 50);
+  --sidebar-accent: oklch(0.245 0.012 50);
+  --sidebar-accent-foreground: oklch(0.94 0.008 65);
+  --sidebar-border: oklch(0.94 0.008 65 / 12%);
+  --sidebar-ring: oklch(0.93 0.01 65);
+  --state-pass: oklch(0.74 0.15 155);
+  --state-warn: oklch(0.79 0.14 72);
+  --state-fail: oklch(0.70 0.18 28);
+  --state-unknown: oklch(0.68 0.015 60);
+}
+
+/* Motion. Durations and curves are tokens so the whole app changes character
+   from one place. --ease-settle overshoots slightly then settles — it is what
+   makes an arrival feel physical rather than mechanical. */
+:root {
+  --dur-fast: 180ms;
+  --dur-base: 320ms;
+  --dur-slow: 460ms;
+  --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --step--1: 0.833rem;
+  --step-0: 1rem;
+  --step-1: 1.2rem;
+  --step-2: 1.44rem;
+  --step-3: 1.728rem;
+  --step-4: 2.074rem;
+}
+
+/* Reduced motion is a designed path, not an absence. Content still arrives in
+   dependency order; it simply arrives without travel. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 1ms;
+    --dur-base: 1ms;
+    --dur-slow: 1ms;
+  }
 }
 
 @layer base {

@@ -1,0 +1,19 @@
+/* A single arrival animation, parameterised by delay. Content starts slightly
+   low and transparent and settles into place. The travel is small on purpose:
+   6px reads as the item arriving, 20px reads as the page being animated at
+   you. Under prefers-reduced-motion the duration tokens collapse to 1ms, so
+   this still runs and still ends in the correct final state — it just has no
+   perceptible travel. That is why nothing here needs a JS branch. */
+.reveal-item {
+  opacity: 0;
+  transform: translateY(6px);
+  animation: reveal-arrive var(--dur-base) var(--ease-settle) forwards;
+  animation-delay: var(--reveal-delay, 0ms);
+}
+
+@keyframes reveal-arrive {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
