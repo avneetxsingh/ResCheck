@@ -236,7 +236,7 @@ export function formatParsedDate(d: ParsedDate): string {
 // the model reported no employer. Never returns "" — an empty name would
 // produce "between  and Globex".
 export function roleLabel(role: RoleBlock): string {
-  return role.employer.trim() || role.title || "an unnamed role";
+  return role.employer.trim() || role.title.trim() || "an unnamed role";
 }
 
 export interface EmploymentGap {

@@ -257,7 +257,16 @@ describe("computeEmploymentGaps", () => {
   it("falls back to the title when the employer is blank", () => {
     const blank = role("", [2023, 11], [2024, 6]);
     const gaps = computeEmploymentGaps([role("Acme", [2021, 1], [2023, 3]), blank], NOW);
-    expect(gaps[0].role_after).toBe(blank.title);
+    expect(gaps[0].role_after).toBe(blank.title.trim());
+  });
+
+  it("never emits a label with leading or trailing whitespace", () => {
+    const gaps = computeEmploymentGaps(
+      [role("Acme", [2021, 1], [2023, 3]), role("", [2023, 11], [2024, 6])],
+      NOW
+    );
+    expect(gaps[0].role_after).toBe(gaps[0].role_after.trim());
+    expect(gaps[0].role_after.length).toBeGreaterThan(0);
   });
 
   // The two gap calculations must never disagree — one drives the signals
