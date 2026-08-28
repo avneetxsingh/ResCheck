@@ -33,18 +33,21 @@ export function AmbushKitPanel({ kit }: AmbushKitPanelProps) {
   return (
     <ol className="flex flex-col gap-5">
       {kit.questions.map((q, i) => (
-        <Reveal key={`${q.key}-${q.question}`} delay={i * 40}>
-          <li className="border-l-2 border-border pl-4">
+        // Reveal renders a <div>, so it sits INSIDE the <li> rather than around
+        // it: a wrapper between <ol> and <li> stops screen readers announcing
+        // this as a list.
+        <li key={`${q.key}-${i}`} className="border-l-2 border-border pl-4">
+          <Reveal delay={i * 40}>
             <p className="text-sm leading-relaxed">{q.question}</p>
             <ul className="mt-1.5 flex flex-col gap-0.5">
-              {q.evidence.map((e) => (
-                <li key={e} className="font-mono text-xs text-muted-foreground">
+              {q.evidence.map((e, j) => (
+                <li key={`${j}-${e}`} className="font-mono text-xs text-muted-foreground">
                   {e}
                 </li>
               ))}
             </ul>
-          </li>
-        </Reveal>
+          </Reveal>
+        </li>
       ))}
     </ol>
   );
