@@ -113,13 +113,15 @@ describe("buildAmbushKit — ordering and volume", () => {
   });
 
   it("caps the list, keeping the most expensive questions", () => {
-    const gaps = Array.from({ length: 5 }, (_, i) => ({ ...GAP, months: 8 + i }));
+    const gaps = Array.from({ length: 5 }, (_, i) => ({ ...GAP, months: 7 + i }));
     const mustHave = ["A", "B", "C", "D"].map((n) => SKILL({ name: n, strength: "weak" }));
     const kit = buildAmbushKit({ ...base, gaps, mustHave });
     expect(kit.questions.length).toBeLessThanOrEqual(6);
     expect(kit.questions[0].key).toBe("employment_gap");
-    // Longest gap survives the cap.
-    expect(kit.questions[0].question).toContain("12 months");
+    // Longest gap survives the cap. 11 rather than 12 on purpose: monthsLabel
+    // rolls 12 over to "1 year", which would make this assert the formatter's
+    // rollover rule instead of the cap's ordering.
+    expect(kit.questions[0].question).toContain("11 months");
   });
 });
 
@@ -142,5 +144,11 @@ describe("buildAmbushKit — every count has a singular branch", () => {
     const kit = buildAmbushKit({ ...base, gaps: [{ ...GAP, months: 1 }] });
     expect(kit.questions[0].question).toContain("1 month ");
     expect(kit.questions[0].question).not.toContain("1 months");
+  });
+
+  it("renders a twelve-month gap as a year, not as twelve months", () => {
+    const kit = buildAmbushKit({ ...base, gaps: [{ ...GAP, months: 12 }] });
+    expect(kit.questions[0].question).toContain("1 year");
+    expect(kit.questions[0].question).not.toContain("12 months");
   });
 });
