@@ -60,8 +60,8 @@ export const OFFER_ITEMS: OfferItem[] = [
     name: "The Ambush Kit",
     blurb:
       "The interview questions your résumé invites — the gap, the short tenure, the skill you list but never evidence.",
-    basis: "src/lib/funnel.ts competitiveness signals",
-    available: true,
+    basis: "Phase 4 — derives from funnel.ts competitiveness signals",
+    available: false,
   },
 ];
 
