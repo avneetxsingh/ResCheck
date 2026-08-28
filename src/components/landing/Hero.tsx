@@ -17,7 +17,7 @@ export function Hero() {
       </Reveal>
       <Reveal delay={60}>
         <p className="mt-5 max-w-prose text-base sm:text-lg text-muted-foreground leading-relaxed">
-          Most tools invent a score. This one computes three things it can prove — whether your
+          Most tools invent a score. This one computes three things it can actually check — whether your
           document parses, whether it meets the requirements the posting actually states, and
           whether a recruiter&apos;s search would surface you — and says plainly when it
           cannot know.
@@ -30,7 +30,7 @@ export function Hero() {
           </Link>
           <p className="text-sm text-muted-foreground">
             <span className="font-mono tabular-nums text-foreground">{FREE_RUN_LIMIT}</span>{" "}
-            free {FREE_RUN_LIMIT === 1 ? "check" : "checks"}, no account, nothing kept.
+            free {FREE_RUN_LIMIT === 1 ? "check" : "checks"}, no account, no copy of your résumé kept.
           </p>
         </div>
       </Reveal>

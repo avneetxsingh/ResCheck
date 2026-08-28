@@ -13,7 +13,7 @@ const SAMPLE: SampleRow[] = [
   { label: "Contact details found", value: "email · phone · GitHub", tone: "pass" },
   { label: "Sections detected", value: "Experience · Skills", tone: "pass" },
   { label: "Education heading", value: "not detected", tone: "fail" },
-  { label: "Must-haves above the fold", value: "2 of 5", tone: "warn" },
+  { label: "Must-haves matched", value: "2 of 5", tone: "warn" },
 ];
 
 const TONE: Record<SampleRow["tone"], string> = {
@@ -28,8 +28,9 @@ export function FirstScreenSample() {
       <Reveal>
         <h2 className="text-2xl font-semibold tracking-tight">The First Screen</h2>
         <p className="mt-2 max-w-prose text-muted-foreground">
-          Everything a recruiter sees before they scroll — which sections a parser found, which
-          contact details survived, and how many of the posting&apos;s must-haves appear up top.
+          What a parser pulls out of your document before a person reads a word of it — which
+          sections it found, which contact details survived, and which of the posting&apos;s
+          must-haves it could match.
         </p>
       </Reveal>
       <Reveal delay={80}>

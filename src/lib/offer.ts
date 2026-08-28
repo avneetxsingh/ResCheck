@@ -69,11 +69,11 @@ export const GUARANTEES: Guarantee[] = [
   {
     name: "Derived, never invented.",
     body:
-      "Every number here is computed from your document. Where something cannot be computed, we say so instead of guessing — that is why there is no overall score.",
+      "Every number here is computed from your document and the posting you paste. Where something cannot be computed, we say so instead of guessing — that is why there is no overall score.",
   },
   {
     name: "We never see your résumé twice.",
     body:
-      "Your résumé and your history stay in your browser. There is no account, because there is nothing to log into.",
+      "Your résumé is read once to build your report and then dropped — we keep no copy of it, and your history never leaves your browser. There is no account, because there is nothing to log into.",
   },
 ];

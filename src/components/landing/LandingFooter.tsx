@@ -12,7 +12,8 @@ export function LandingFooter() {
       <p className="mt-2 max-w-prose text-muted-foreground">
         <span className="font-mono tabular-nums text-foreground">{FREE_RUN_LIMIT}</span>{" "}
         free {FREE_RUN_LIMIT === 1 ? "check" : "checks"} on us. After that, attach your own API
-        key and run as many as you like — it stays in your browser.
+        key and run as many as you like — it is stored in your browser and never kept on our
+        server.
       </p>
       <Link
         href="/check"

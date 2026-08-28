@@ -3,13 +3,17 @@ import { OFFER_ITEMS } from "@/lib/offer";
 import { cn } from "@/lib/utils";
 
 export function ValueStack() {
+  const pending = OFFER_ITEMS.filter((item) => !item.available).length;
+
   return (
     <section className="py-16 border-t border-border">
       <Reveal>
         <h2 className="text-2xl font-semibold tracking-tight">What you get</h2>
         <p className="mt-2 max-w-prose text-muted-foreground">
-          Every one of these is computed from your document. None of them is a model&apos;s
-          opinion of you.
+          Each is computed from your document and the posting you paste — none of them is a
+          model&apos;s opinion of you.
+          {pending > 0 &&
+            ` ${pending === 1 ? "One is" : `${pending} are`} still being built, and marked below.`}
         </p>
       </Reveal>
       <div className="mt-8 flex flex-col gap-3">
