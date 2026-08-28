@@ -110,14 +110,21 @@ function staleQuestions(mustHave: Skill[], alreadyAsked: Set<string>): AmbushQue
 export function buildAmbushKit(input: AmbushKitInput): AmbushKit {
   const { gaps, mustHave, knockout, metrics } = input;
 
+  const unevidenced = unevidencedQuestions(mustHave);
+  // Deduplicate against the questions actually produced, not against every weak
+  // skill. A weak skill that fell outside MAX_UNEVIDENCED has no question yet,
+  // so suppressing its stale question too would drop it from the kit entirely.
   const askedSkills = new Set(
-    mustHave.filter((s) => s.strength === "weak").map((s) => s.name)
+    mustHave
+      .filter((s) => s.strength === "weak")
+      .slice(0, MAX_UNEVIDENCED)
+      .map((s) => s.name)
   );
 
   const questions = [
     ...knockoutQuestions(knockout),
     ...gapQuestions(gaps),
-    ...unevidencedQuestions(mustHave),
+    ...unevidenced,
     ...tenureQuestions(metrics),
     ...staleQuestions(mustHave, askedSkills),
   ].sort((a, b) => TRIGGER_ORDER.indexOf(a.key) - TRIGGER_ORDER.indexOf(b.key));

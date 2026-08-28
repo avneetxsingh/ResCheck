@@ -123,6 +123,21 @@ describe("buildAmbushKit — ordering and volume", () => {
     // rollover rule instead of the cap's ordering.
     expect(kit.questions[0].question).toContain("11 months");
   });
+
+  it("still asks about a stale skill whose unevidenced question was capped out", () => {
+    // Four weak skills: only three get an unevidenced question. The fourth is
+    // also stale, so it must surface as a stale question rather than vanish.
+    const mustHave = [
+      SKILL({ name: "A", strength: "weak" }),
+      SKILL({ name: "B", strength: "weak" }),
+      SKILL({ name: "C", strength: "weak" }),
+      SKILL({ name: "D", strength: "weak", last_used_months_ago: 40 }),
+    ];
+    const kit = buildAmbushKit({ ...base, mustHave });
+    const named = kit.questions.filter((q) => q.question.includes("D"));
+    expect(named).toHaveLength(1);
+    expect(named[0].key).toBe("stale_skill");
+  });
 });
 
 describe("buildAmbushKit — the two empty states are different states", () => {
