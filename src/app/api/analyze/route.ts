@@ -268,8 +268,12 @@ async function callStage<T>(opts: {
       if (i === 0) {
         // Naming the cause matters: an unexplained "failed" hid a model
         // returning empty output for an entire debugging session.
+        // Logged, never relayed. On the hosted path this message describes the
+        // OWNER's account — request ids, org context, sometimes key fragments —
+        // none of which is the visitor's to see or act on.
         const why = err instanceof Error ? err.message : String(err);
-        opts.onWarning(`A model call failed — retrying once. (${why.slice(0, 160)})`);
+        console.error("[analyze] model call failed, retrying:", why);
+        opts.onWarning("A model call failed — retrying once.");
       }
     }
   }

@@ -50,21 +50,20 @@ export function HistoryPanel({ open, onOpenChange, entries, activeId, onSelect, 
             ) : (
               <ul>
                 {entries.map((entry) => (
-                  <li key={entry.id}>
-                    <div
-                      role="button"
-                      tabIndex={0}
+                  // Two sibling controls, never one nested inside the other:
+                  // a control inside a control is not reliably reachable by
+                  // assistive technology, and the inner one here deletes data.
+                  <li
+                    key={entry.id}
+                    className={cn(
+                      "flex items-center gap-2 px-5 py-2.5 transition-colors",
+                      activeId === entry.id ? "bg-muted/60" : "hover:bg-muted/30"
+                    )}
+                  >
+                    <button
+                      type="button"
                       onClick={() => selectAndClose(entry.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          selectAndClose(entry.id);
-                        }
-                      }}
-                      className={cn(
-                        "flex w-full cursor-pointer items-center gap-3 px-5 py-2.5 text-left transition-colors",
-                        activeId === entry.id ? "bg-muted/60" : "hover:bg-muted/30"
-                      )}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
                     >
                       <span className="min-w-0 flex-1 truncate text-sm">{entry.job_title_hint}</span>
                       <span className="shrink-0 font-mono text-xs text-muted-foreground">
@@ -78,21 +77,15 @@ export function HistoryPanel({ open, onOpenChange, entries, activeId, onSelect, 
                           {entry.overall_score}
                         </span>
                       )}
-                      <span
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        className="shrink-0"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => onRemove(entry.id)}
-                          aria-label={`Delete run: ${entry.job_title_hint}`}
-                          className="rounded p-1 text-muted-foreground transition-colors hover:text-state-fail"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </span>
-                    </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onRemove(entry.id)}
+                      aria-label={`Delete run: ${entry.job_title_hint}`}
+                      className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-state-fail"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </li>
                 ))}
               </ul>

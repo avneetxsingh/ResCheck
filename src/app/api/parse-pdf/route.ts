@@ -30,6 +30,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Without this, a request carrying no multipart body throws inside
+  // formData() and lands in the generic 500 branch — recording a client
+  // mistake as a server fault and masking real 5xx once this is public.
+  const contentType = req.headers.get("content-type") ?? "";
+  if (!contentType.includes("multipart/form-data")) {
+    return NextResponse.json<ApiError>(
+      { error: "Upload the PDF as a file attachment.", code: "INVALID_REQUEST" },
+      { status: 400 }
+    );
+  }
+
   try {
     const formData = await req.formData();
     const file = formData.get("resume");
