@@ -1,6 +1,6 @@
 // Deterministic ATS-style resume sectionizer. No AI — what this file reports
 // is by construction present in the text.
-import { detectMergedColumns } from "./column-detect";
+import { detectMergedColumns, splitOnGap } from "./column-detect";
 import type {
   ResumeSection,
   AtsContactInfo,
@@ -71,9 +71,9 @@ function findUnrecognizedHeadings(
   const seen = new Set<ResumeSection>();
   lines.forEach((line, i) => {
     if (matchSectionHeading(line) !== null) return;
-    const m = line.match(/^(.*?\S) {3,}(\S.*)$/);
-    if (!m) return;
-    for (const fragment of [m[1].trim(), m[2].trim()]) {
+    const split = splitOnGap(line);
+    if (!split) return;
+    for (const fragment of split) {
       const section = matchSectionHeading(fragment);
       if (section === null || detected.has(section) || seen.has(section)) continue;
       seen.add(section);
@@ -122,7 +122,7 @@ export function extractResumeStructure(text: string): StructuredResume {
 
   const allLines = text.split(/\r?\n/);
   const detected = new Set(sections.filter((s) => s.heading !== "").map((s) => s.name));
-  const columnEvidence = detectMergedColumns(text, matchSectionHeading);
+  const columnEvidence = detectMergedColumns(text, matchSectionHeading, detected);
   if (columnEvidence.length > 0) {
     // Flows through evaluateParseGate's existing rule, which can only move
     // clean -> risky. No special-casing here, deliberately.
@@ -145,18 +145,17 @@ export function toAtsExtraction(structured: StructuredResume): AtsExtraction {
     ...new Set(structured.sections.filter((s) => s.heading !== "").map((s) => s.name)),
   ];
   const detectedSet = new Set(detected);
-  const contactMissing: ("email" | "phone" | "links")[] = [];
-  if (!structured.contact.email) contactMissing.push("email");
-  if (!structured.contact.phone) contactMissing.push("phone");
-  if (structured.contact.links.length === 0) contactMissing.push("links");
+  // A section flagged unrecognized was found, just not as a proper heading —
+  // "Not detected" and "Found, but not read as a heading" are opposite
+  // claims about the same section, so the unrecognized one wins.
+  const unrecognizedSet = new Set(structured.sections_unrecognized.map((u) => u.section));
 
   return {
     sections_detected: detected,
     contact: structured.contact,
     warnings: structured.warnings,
-    sections_missing: CORE_SECTIONS.filter((s) => !detectedSet.has(s)),
+    sections_missing: CORE_SECTIONS.filter((s) => !detectedSet.has(s) && !unrecognizedSet.has(s)),
     sections_unrecognized: structured.sections_unrecognized,
-    contact_missing: contactMissing,
     column_evidence: structured.column_evidence,
   };
 }

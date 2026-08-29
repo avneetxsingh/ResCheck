@@ -18,7 +18,10 @@ const MIN_INTERIOR_GAPS = 3;
 
 // Splits a line at its first run of 3+ interior spaces. Returns null when the
 // line has no such run — the gap must have text on both sides to be interior.
-function splitOnGap(line: string): [string, string] | null {
+// Exported so ats-extract's own gap-fragment lookup can't drift out of
+// lockstep with this one — two independent copies would report different
+// line numbers for the same document.
+export function splitOnGap(line: string): [string, string] | null {
   const m = line.match(/^(.*?\S) {3,}(\S.*)$/);
   return m ? [m[1].trim(), m[2].trim()] : null;
 }
@@ -28,7 +31,8 @@ function splitOnGap(line: string): [string, string] | null {
 // every well-formatted document.
 function isDateRange(fragment: string): boolean {
   const parts = fragment
-    .replace(/[–—]/g, "-")
+    .replace(/[‐‒–—―−]/g, "-")
+    .replace(/\s+to\s+/gi, " - ")
     .split(/\s*-\s*/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
@@ -36,9 +40,29 @@ function isDateRange(fragment: string): boolean {
   return parts.every((p) => parseResumeDate(p) !== null);
 }
 
+// A stranded heading is a section title dragged onto another line by a column
+// merge. Two things are NOT that, and both are ordinary one-column formatting:
+//
+//  - a label ending in a colon ("Technologies:"). matchSectionHeading strips a
+//    trailing colon before matching, so without this guard every labelled
+//    skills row reads as a merged column.
+//  - a section that already has a real heading elsewhere in the document. If
+//    SKILLS was found properly, a mid-line "skills" match is a label.
+function strandedHeading(
+  fragment: string,
+  matchHeading: SectionMatcher,
+  detectedSections: ReadonlySet<string>
+): string | null {
+  if (fragment.trimEnd().endsWith(":")) return null;
+  const section = matchHeading(fragment);
+  if (section === null || detectedSections.has(section)) return null;
+  return section;
+}
+
 export function detectMergedColumns(
   text: string,
-  matchHeading: SectionMatcher
+  matchHeading: SectionMatcher,
+  detectedSections: ReadonlySet<string> = new Set()
 ): ColumnEvidence[] {
   const lines = text.split(/\r?\n/);
   const evidence: ColumnEvidence[] = [];
@@ -54,7 +78,10 @@ export function detectMergedColumns(
     // headings do not land mid-line in single-column text. It happens because
     // matchSectionHeading rejects lines over 40 chars, so a merge silently
     // reclassifies the heading as body text.
-    if (matchHeading(left) !== null || matchHeading(right) !== null) {
+    if (
+      strandedHeading(left, matchHeading, detectedSections) !== null ||
+      strandedHeading(right, matchHeading, detectedSections) !== null
+    ) {
       headingsMidLine += 1;
       evidence.push({ line, line_number: i + 1, signal: "heading_mid_line" });
       return;

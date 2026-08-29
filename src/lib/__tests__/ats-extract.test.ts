@@ -5,6 +5,14 @@ import {
   buildSectionizedText,
   sectionNames,
 } from "@/lib/ats-extract";
+import { evaluateParseGate } from "@/lib/funnel";
+import type { FormattingAudit } from "@/types/analysis";
+
+const CLEAN_AUDIT: FormattingAudit = {
+  whitespace_issues: [], bold_inconsistencies: [], bullet_inconsistencies: [],
+  date_format_issues: [], capitalization_issues: [], other_inconsistencies: [],
+  is_clean: true,
+};
 
 const SAMPLE = `Avneet Singh
 avneet@example.com | (555) 123-4567 | linkedin.com/in/avneet
@@ -109,11 +117,6 @@ describe("what the parser dropped", () => {
     expect(toAtsExtraction(extractResumeStructure(full)).sections_missing).toEqual([]);
   });
 
-  it("names the contact fields that were not found", () => {
-    const x = toAtsExtraction(extractResumeStructure("Jane Doe\nno contact details here"));
-    expect(x.contact_missing).toEqual(expect.arrayContaining(["email", "phone"]));
-  });
-
   // The actionable half: the heading word IS in the document, on a known line,
   // and the sectionizer read it as body text because the line exceeds 40 chars.
   it("recovers a heading the sectionizer rejected, with its line number", () => {
@@ -130,7 +133,7 @@ describe("what the parser dropped", () => {
     expect(found.find((u) => u.section === "skills")?.text).toBe(merged.split("\n")[0]);
   });
 
-  it("warns about merged columns, which reaches Gate 1 through the parse rule", () => {
+  it("warns about merged columns in the parse warnings", () => {
     const merged = [
       "Jane Doe                           SKILLS",
       "Senior Engineer                    TypeScript, Go",
@@ -143,12 +146,46 @@ describe("what the parser dropped", () => {
     expect(toAtsExtraction(s).column_evidence?.length).toBeGreaterThan(0);
   });
 
+  // Calls the actual gate rather than only checking the warning string, so a
+  // regression that decoupled the warning from evaluateParseGate would be caught.
+  it("downgrades the parse gate when columns look merged", () => {
+    // Real headings (experience/education/skills) and contact are present, so
+    // the gate cannot already be non-clean for those reasons — a stranded
+    // "CERTIFICATIONS" fragment plus three ordinary gapped body lines are the
+    // only thing left to move the verdict off "clean".
+    const merged = [
+      "Jane Doe",
+      "jane@example.com | 555-123-4567",
+      "",
+      "EXPERIENCE",
+      "Senior Engineer, Acme Corp",
+      "Built dashboards in React                    Led migration to TypeScript",
+      "Owned the on-call rotation                    Ran the platform design review",
+      "Shipped v2 of the API                         Cut infra cost by a fifth",
+      "Random note                                    CERTIFICATIONS",
+      "EDUCATION",
+      "B.S. Computer Science, 2019",
+      "SKILLS",
+      "JavaScript, Python, SQL",
+    ].join("\n");
+    const structured = extractResumeStructure(merged);
+    expect(toAtsExtraction(structured).column_evidence?.length).toBeGreaterThan(0);
+    const gate = evaluateParseGate(structured, CLEAN_AUDIT);
+    expect(gate.verdict).not.toBe("clean");
+  });
+
   it("adds no column warning to an ordinary single-column résumé", () => {
+    // Includes a stranded heading (PROJECTS, never detected as a real
+    // section elsewhere) so headingsMidLine fires. The résumé staying column-
+    // warning-free then depends entirely on isDateRange filtering the three
+    // gapped date lines below MIN_INTERIOR_GAPS — a fixture with no stranded
+    // heading would pass even if the date filter were deleted.
     const plain = [
       "EXPERIENCE",
       "Acme Corp                          2020 - 2023",
       "Globex Inc                         2018 - 2020",
       "Initech                            2015 - 2018",
+      "Beta LLC                           PROJECTS",
     ].join("\n");
     const s = extractResumeStructure(plain);
     expect(s.warnings.some((w) => /column/i.test(w))).toBe(false);

@@ -8,7 +8,10 @@ const matchHeading = (line: string): string | null => {
   if (t.length === 0 || t.length > 40) return null;
   if (/^(experience|work experience)$/i.test(t)) return "experience";
   if (/^education$/i.test(t)) return "education";
-  if (/^skills$/i.test(t)) return "skills";
+  // Mirrors ats-extract's real skills pattern (not just the bare word) so the
+  // labelled-skills-block regression test below actually exercises the same
+  // match the production heading matcher performs.
+  if (/^((technical|core|key)\s+)?(skills|competencies|technologies)$/i.test(t)) return "skills";
   return null;
 };
 
@@ -40,8 +43,12 @@ describe("detectMergedColumns — the false positive it exists to avoid", () => 
   });
 
   it("does not fire on a heading mid-line alone, without enough interior gaps", () => {
+    // Two qualifying gapped lines — one short of MIN_INTERIOR_GAPS (3) — so
+    // this genuinely probes the threshold. A fixture with zero interior gaps
+    // would pass even if the threshold were 1.
     const text = [
-      "Some intro line with no gap at all",
+      "Built the billing service          owned on-call rotation",
+      "Migrated the data warehouse        cut query cost by half",
       "Acme Corp                          EDUCATION",
     ].join("\n");
     expect(run(text)).toEqual([]);
@@ -73,6 +80,31 @@ describe("detectMergedColumns — the false positive it exists to avoid", () => 
       "Jan 2015 - Dec 2017                Engineer, Initech",
     ].join("\n");
     expect(run(text)).toEqual([]);
+  });
+
+  // Same fixture shape as the other date tests, so the empty result can only
+  // come from the filter recognizing these three dash/word forms.
+  it("filters minus-sign, hyphen-punctuation, and 'to' date ranges", () => {
+    const text = [
+      "Jane Doe                           SKILLS",
+      "Acme Corp                          2020 − 2023",
+      "Globex Inc                         2018 ‐ 2020",
+      "Initech                            2015 to 2018",
+    ].join("\n");
+    expect(run(text)).toEqual([]);
+  });
+
+  it("does not fire on a labelled skills block in a one-column résumé", () => {
+    const text = [
+      "TECHNICAL SKILLS",
+      "Languages:        Python, Go, TypeScript",
+      "Technologies:     Docker, Kubernetes, Terraform",
+      "Databases:        PostgreSQL, Redis, DynamoDB",
+      "Tools:            Git, Jenkins, Datadog",
+      "EXPERIENCE",
+      "Acme Corp                          San Francisco, CA",
+    ].join("\n");
+    expect(detectMergedColumns(text, matchHeading, new Set(["skills", "experience"]))).toEqual([]);
   });
 });
 
