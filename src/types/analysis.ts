@@ -109,6 +109,23 @@ export interface AtsContactInfo {
   links: string[];
 }
 
+export type ColumnSignal = "interior_gap" | "heading_mid_line";
+
+export interface ColumnEvidence {
+  /** Verbatim from the résumé text. Never reconstructed. */
+  line: string;
+  /** 1-based, counting every line including blanks, so a user can find it. */
+  line_number: number;
+  signal: ColumnSignal;
+}
+
+export interface UnrecognizedHeading {
+  section: ResumeSection;
+  line_number: number;
+  /** Verbatim line the heading word was found on. */
+  text: string;
+}
+
 export interface AtsExtraction {
   sections_detected: string[]; // canonical ResumeSection names with a real heading found
   contact: AtsContactInfo;
