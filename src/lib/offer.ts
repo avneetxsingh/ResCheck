@@ -36,7 +36,7 @@ export const OFFER_ITEMS: OfferItem[] = [
     name: "The ATS X-Ray",
     blurb:
       "Exactly what a parser pulls out of your document, and what it silently drops on the way.",
-    basis: "src/lib/ats-extract.ts, src/lib/formatting-audit.ts",
+    basis: "src/lib/ats-extract.ts, src/lib/formatting-audit.ts, src/lib/column-detect.ts",
     available: true,
   },
   {
