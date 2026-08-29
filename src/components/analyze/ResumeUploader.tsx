@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, FileText, X, AlertCircle } from "lucide-react";
+import { Upload, FileText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -75,19 +75,27 @@ export function ResumeUploader({
     <div
       {...getRootProps()}
       className={cn(
-        "relative flex flex-col items-center justify-center gap-3 p-8 min-h-[224px] rounded-lg border border-dashed cursor-pointer transition-colors",
+        "group relative flex min-h-[224px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8",
+        "transition-[background-color,border-color] duration-[var(--dur-fast)] ease-[var(--ease-settle)]",
         isDragActive
-          ? "border-primary"
-          : "border-border hover:border-muted-foreground/40"
+          ? "border-primary bg-primary/5"
+          : "border-border hover:border-muted-foreground/50 hover:bg-muted/40"
       )}
     >
       <input {...getInputProps()} />
-      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-muted">
-        {isDragActive ? (
-          <AlertCircle className="w-6 h-6 text-primary" />
-        ) : (
-          <Upload className="w-6 h-6 text-muted-foreground" />
+      <div
+        className={cn(
+          "flex h-12 w-12 items-center justify-center rounded-full bg-muted",
+          "transition-transform duration-[var(--dur-fast)] ease-[var(--ease-settle)]",
+          isDragActive ? "scale-110" : "group-hover:scale-105"
         )}
+      >
+        <Upload
+          className={cn(
+            "h-6 w-6 transition-colors duration-[var(--dur-fast)]",
+            isDragActive ? "text-primary" : "text-muted-foreground"
+          )}
+        />
       </div>
       <div className="text-center">
         <p className="text-sm font-medium">

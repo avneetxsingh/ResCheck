@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, ArrowRight } from "lucide-react";
+import { Reveal } from "@/components/motion/Reveal";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ResumeUploader } from "@/components/analyze/ResumeUploader";
@@ -42,13 +43,15 @@ export function InputRail({
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); onSubmit(); }}
-      className="space-y-7 px-6 py-8 border-b border-border"
+      className="mx-auto w-full max-w-2xl space-y-6 border-b border-border px-6 py-10"
     >
+      <Reveal>
       <p className="text-[length:var(--step--1)] text-muted-foreground max-w-prose leading-relaxed">
         Check a résumé against a job posting. ResCheck reports what it can actually
         derive — whether the document parses, whether you meet the stated requirements,
         and whether a recruiter&apos;s search would find you. It does not score you.
       </p>
+      </Reveal>
 
       {hydrated && !hasKey && !needsOwnKey && freeRunsRemaining !== null && (
         <p className="text-sm text-muted-foreground">
@@ -99,7 +102,7 @@ export function InputRail({
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <Reveal delay={60}>
         <div className="space-y-2">
           <p className="text-sm font-medium">Résumé</p>
           <ResumeUploader
@@ -115,9 +118,11 @@ export function InputRail({
             </p>
           )}
         </div>
+      </Reveal>
 
+      <Reveal delay={120}>
         <JobDescriptionInput value={jobDescription} onChange={onJobDescriptionChange} />
-      </div>
+      </Reveal>
 
       {isRunning && <ProgressStream stage={stage} progress={progress} />}
 
@@ -139,20 +144,37 @@ export function InputRail({
         </Alert>
       )}
 
-      <div className="flex items-center gap-3 pt-1">
-        <Button type="submit" disabled={!canSubmit}>
-          {isRunning ? "Analysing…" : "Analyse"}
-        </Button>
-        {!canSubmit && !isRunning && hydrated && (
-          <p className="text-xs text-muted-foreground">
-            {needsOwnKey
-              ? "Add an API key in settings first"
-              : !file
-                ? "Add your résumé to continue"
-                : "Paste a job description to continue"}
+      <Reveal delay={180}>
+        <div className="space-y-2 pt-1">
+          <Button
+            type="submit"
+            disabled={!canSubmit}
+            // The arrow and the shadow are the whole hover event. No lift here:
+            // the primitive already owns an active-press transform, and two
+            // competing translates read as a wobble rather than a press.
+            className="group h-12 w-full rounded-full text-base font-medium shadow-sm transition-[background-color,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-settle)] hover:shadow-md disabled:shadow-none"
+          >
+            {isRunning ? (
+              "Analysing…"
+            ) : (
+              <>
+                Analyse
+                <ArrowRight className="ml-1.5 size-4 transition-transform duration-[var(--dur-fast)] ease-[var(--ease-settle)] group-hover:translate-x-0.5" />
+              </>
+            )}
+          </Button>
+          {/* Reserved height so the hint appearing never nudges the button. */}
+          <p className="flex h-4 items-center justify-center text-xs text-muted-foreground">
+            {!canSubmit && !isRunning && hydrated
+              ? needsOwnKey
+                ? "Add an API key in settings first"
+                : !file
+                  ? "Add your résumé to continue"
+                  : "Paste a job description to continue"
+              : ""}
           </p>
-        )}
-      </div>
+        </div>
+      </Reveal>
     </form>
   );
 }
