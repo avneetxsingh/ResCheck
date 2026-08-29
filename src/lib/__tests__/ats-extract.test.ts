@@ -89,3 +89,78 @@ describe("helpers", () => {
     expect(names).toContain("experience");
   });
 });
+
+describe("what the parser dropped", () => {
+  const bare = "Jane Doe\njane@example.com\n555-555-5555\nSome prose with no headings at all.";
+
+  it("reports only core sections as missing, never projects or certifications", () => {
+    const x = toAtsExtraction(extractResumeStructure(bare));
+    expect(x.sections_missing).toEqual(
+      expect.arrayContaining(["experience", "education", "skills"])
+    );
+    expect(x.sections_missing).not.toContain("projects");
+    expect(x.sections_missing).not.toContain("certifications");
+  });
+
+  it("reports nothing missing when every core section is detected", () => {
+    const full = [
+      "EXPERIENCE", "Acme Corp", "EDUCATION", "State University", "SKILLS", "Go, TypeScript",
+    ].join("\n");
+    expect(toAtsExtraction(extractResumeStructure(full)).sections_missing).toEqual([]);
+  });
+
+  it("names the contact fields that were not found", () => {
+    const x = toAtsExtraction(extractResumeStructure("Jane Doe\nno contact details here"));
+    expect(x.contact_missing).toEqual(expect.arrayContaining(["email", "phone"]));
+  });
+
+  // The actionable half: the heading word IS in the document, on a known line,
+  // and the sectionizer read it as body text because the line exceeds 40 chars.
+  it("recovers a heading the sectionizer rejected, with its line number", () => {
+    const merged = [
+      "Jane Doe                           SKILLS",
+      "Senior Engineer                    TypeScript, Go",
+      "jane@example.com                   Terraform",
+      "Portfolio: janedoe.dev             AWS, Docker",
+      "Acme Corp                          EDUCATION",
+    ].join("\n");
+    const x = toAtsExtraction(extractResumeStructure(merged));
+    const found = x.sections_unrecognized ?? [];
+    expect(found.some((u) => u.section === "skills" && u.line_number === 1)).toBe(true);
+    expect(found.find((u) => u.section === "skills")?.text).toBe(merged.split("\n")[0]);
+  });
+
+  it("warns about merged columns, which reaches Gate 1 through the parse rule", () => {
+    const merged = [
+      "Jane Doe                           SKILLS",
+      "Senior Engineer                    TypeScript, Go",
+      "jane@example.com                   Terraform",
+      "Portfolio: janedoe.dev             AWS, Docker",
+      "Acme Corp                          EDUCATION",
+    ].join("\n");
+    const s = extractResumeStructure(merged);
+    expect(s.warnings.some((w) => /column/i.test(w))).toBe(true);
+    expect(toAtsExtraction(s).column_evidence?.length).toBeGreaterThan(0);
+  });
+
+  it("adds no column warning to an ordinary single-column résumé", () => {
+    const plain = [
+      "EXPERIENCE",
+      "Acme Corp                          2020 - 2023",
+      "Globex Inc                         2018 - 2020",
+      "Initech                            2015 - 2018",
+    ].join("\n");
+    const s = extractResumeStructure(plain);
+    expect(s.warnings.some((w) => /column/i.test(w))).toBe(false);
+  });
+});
+
+describe("garbled-character warning", () => {
+  it("says 'character' for one and 'characters' for several", () => {
+    const one = extractResumeStructure("Jane\u{FFFD}Doe").warnings.join(" ");
+    expect(one).toContain("1 garbled character ");
+    expect(one).not.toContain("character(s)");
+    const many = extractResumeStructure("Jane\u{FFFD}\u{FFFD}Doe").warnings.join(" ");
+    expect(many).toContain("2 garbled characters ");
+  });
+});

@@ -1,6 +1,13 @@
 // Deterministic ATS-style resume sectionizer. No AI — what this file reports
 // is by construction present in the text.
-import type { ResumeSection, AtsContactInfo, AtsExtraction } from "@/types/analysis";
+import { detectMergedColumns } from "./column-detect";
+import type {
+  ResumeSection,
+  AtsContactInfo,
+  AtsExtraction,
+  ColumnEvidence,
+  UnrecognizedHeading,
+} from "@/types/analysis";
 
 export interface ResumeSectionBlock {
   name: ResumeSection;
@@ -12,6 +19,8 @@ export interface StructuredResume {
   sections: ResumeSectionBlock[];
   contact: AtsContactInfo;
   warnings: string[];
+  column_evidence: ColumnEvidence[];
+  sections_unrecognized: UnrecognizedHeading[];
 }
 
 const SECTION_PATTERNS: [ResumeSection, RegExp][] = [
@@ -45,6 +54,35 @@ function findPhone(text: string): string | null {
   return null;
 }
 
+// Only sections a résumé is normally expected to have. `projects` and
+// `certifications` are never reported missing: plenty of good résumés have
+// neither, and listing them implies they should exist — a judgement this
+// product does not make.
+const CORE_SECTIONS: ResumeSection[] = ["experience", "education", "skills"];
+
+// The heading word IS in the document but the sectionizer rejected its line,
+// almost always because a column merge pushed the line past the 40-char limit
+// in matchSectionHeading. Naming the line number is what makes this fixable.
+function findUnrecognizedHeadings(
+  lines: string[],
+  detected: Set<ResumeSection>
+): UnrecognizedHeading[] {
+  const found: UnrecognizedHeading[] = [];
+  const seen = new Set<ResumeSection>();
+  lines.forEach((line, i) => {
+    if (matchSectionHeading(line) !== null) return;
+    const m = line.match(/^(.*?\S) {3,}(\S.*)$/);
+    if (!m) return;
+    for (const fragment of [m[1].trim(), m[2].trim()]) {
+      const section = matchSectionHeading(fragment);
+      if (section === null || detected.has(section) || seen.has(section)) continue;
+      seen.add(section);
+      found.push({ section, line_number: i + 1, text: line });
+    }
+  });
+  return found;
+}
+
 export function extractResumeStructure(text: string): StructuredResume {
   const sections: ResumeSectionBlock[] = [];
   let current: ResumeSectionBlock = { name: "contact", heading: "", lines: [] };
@@ -74,21 +112,52 @@ export function extractResumeStructure(text: string): StructuredResume {
   }
   if (!contact.email) warnings.push("No email address found — ATS contact parsing will fail.");
   if (!contact.phone) warnings.push("No phone number found.");
-  const garbled = (text.match(/�/g) ?? []).length;
+
+  const garbled = (text.match(/\u{FFFD}/gu) ?? []).length;
   if (garbled > 0) {
-    warnings.push(`${garbled} garbled character(s) found — the PDF text layer may be corrupted.`);
+    warnings.push(
+      `${garbled} garbled ${garbled === 1 ? "character" : "characters"} found — the PDF text layer may be corrupted.`
+    );
   }
 
-  return { sections, contact, warnings };
+  const allLines = text.split(/\r?\n/);
+  const detected = new Set(sections.filter((s) => s.heading !== "").map((s) => s.name));
+  const columnEvidence = detectMergedColumns(text, matchSectionHeading);
+  if (columnEvidence.length > 0) {
+    // Flows through evaluateParseGate's existing rule, which can only move
+    // clean -> risky. No special-casing here, deliberately.
+    warnings.push(
+      "Text from two columns appears to have been merged into single lines — an ATS reads this as scrambled."
+    );
+  }
+
+  return {
+    sections,
+    contact,
+    warnings,
+    column_evidence: columnEvidence,
+    sections_unrecognized: findUnrecognizedHeadings(allLines, detected),
+  };
 }
 
 export function toAtsExtraction(structured: StructuredResume): AtsExtraction {
+  const detected = [
+    ...new Set(structured.sections.filter((s) => s.heading !== "").map((s) => s.name)),
+  ];
+  const detectedSet = new Set(detected);
+  const contactMissing: ("email" | "phone" | "links")[] = [];
+  if (!structured.contact.email) contactMissing.push("email");
+  if (!structured.contact.phone) contactMissing.push("phone");
+  if (structured.contact.links.length === 0) contactMissing.push("links");
+
   return {
-    sections_detected: [
-      ...new Set(structured.sections.filter((s) => s.heading !== "").map((s) => s.name)),
-    ],
+    sections_detected: detected,
     contact: structured.contact,
     warnings: structured.warnings,
+    sections_missing: CORE_SECTIONS.filter((s) => !detectedSet.has(s)),
+    sections_unrecognized: structured.sections_unrecognized,
+    contact_missing: contactMissing,
+    column_evidence: structured.column_evidence,
   };
 }
 

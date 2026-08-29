@@ -24,6 +24,8 @@ const structured = (over: Partial<StructuredResume> = {}): StructuredResume => (
   ],
   contact: { email: "jane@example.com", phone: "555-123-4567", links: [] },
   warnings: [],
+  column_evidence: [],
+  sections_unrecognized: [],
   ...over,
 });
 

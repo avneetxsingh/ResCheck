@@ -130,6 +130,11 @@ export interface AtsExtraction {
   sections_detected: string[]; // canonical ResumeSection names with a real heading found
   contact: AtsContactInfo;
   warnings: string[]; // parse warnings: garbled chars, missing contact, no headings
+  // All four added Phase 4; absent in history entries written before it.
+  sections_missing?: ResumeSection[];
+  sections_unrecognized?: UnrecognizedHeading[];
+  contact_missing?: ("email" | "phone" | "links")[];
+  column_evidence?: ColumnEvidence[];
 }
 
 // ── Screening funnel ──────────────────────────────────────────────────────
