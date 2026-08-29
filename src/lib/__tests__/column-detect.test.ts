@@ -51,6 +51,29 @@ describe("detectMergedColumns — the false positive it exists to avoid", () => 
     expect(run("")).toEqual([]);
     expect(run("Just one line")).toEqual([]);
   });
+
+  // A heading IS stranded here, so headingsMidLine is 1 and the empty result
+  // can only come from the date filter removing the three gapped lines. If
+  // isDateRange stopped working, this test fires and fails.
+  it("filters right-aligned dates even when a heading is stranded mid-line", () => {
+    const text = [
+      "Jane Doe                           SKILLS",
+      "Acme Corp                          2020 - 2023",
+      "Globex Inc                         2018 - 2020",
+      "Initech                            2015 - 2018",
+    ].join("\n");
+    expect(run(text)).toEqual([]);
+  });
+
+  it("filters date-first lines, where the date sits left of the gap", () => {
+    const text = [
+      "Jane Doe                           SKILLS",
+      "Jan 2020 - Dec 2023                Senior Engineer, Acme Corp",
+      "Jan 2018 - Dec 2019                Engineer, Globex Inc",
+      "Jan 2015 - Dec 2017                Engineer, Initech",
+    ].join("\n");
+    expect(run(text)).toEqual([]);
+  });
 });
 
 describe("detectMergedColumns — a genuine merge", () => {

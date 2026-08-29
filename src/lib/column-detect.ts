@@ -60,7 +60,10 @@ export function detectMergedColumns(
       return;
     }
 
-    if (isDateRange(right)) return;
+    // Either side may hold the date: "Acme Corp    2020 - 2023" and
+    // "Jan 2020 - Dec 2023    Senior Engineer" are both ordinary one-column
+    // lines, and neither is evidence of a merge.
+    if (isDateRange(right) || isDateRange(left)) return;
     interiorGaps += 1;
     evidence.push({ line, line_number: i + 1, signal: "interior_gap" });
   });
