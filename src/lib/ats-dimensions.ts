@@ -119,3 +119,41 @@ export function buildAtsDimensions(result: AnalysisResult): AtsDimension[] {
 export function hasNoMeasurableDimension(dims: AtsDimension[]): boolean {
   return dims.every((d) => d.ratio === null);
 }
+
+export interface CheckTally {
+  /** Individual checks this résumé satisfied. */
+  passed: number;
+  /** Individual checks that were actually run. Never includes the unmeasurable. */
+  total: number;
+  /** Axes that could not be checked at all, named so the figure can say so. */
+  unmeasured: string[];
+}
+
+/**
+ * The headline figure, and the reason it is allowed to exist.
+ *
+ * This is NOT the `overall_ats_score` deleted in sub-project C. That number was
+ * a weighted blend of invented sub-scores; this is a literal count of discrete
+ * checks the app ran — one per recruiter search, per required skill, per
+ * checkable requirement, per expected section, per preferred skill. Every unit
+ * is auditable, and the same counts are listed beside the chart.
+ *
+ * Two properties keep it from drifting back into a score: an axis that could
+ * not be measured is excluded from BOTH sides of the fraction rather than
+ * counted as a failure, and its name is carried out so the figure can admit
+ * what it left out.
+ */
+export function summariseChecks(dims: AtsDimension[]): CheckTally {
+  let passed = 0;
+  let total = 0;
+  const unmeasured: string[] = [];
+  for (const d of dims) {
+    if (d.ratio === null || d.present === null || d.total === null) {
+      unmeasured.push(d.label);
+      continue;
+    }
+    passed += d.present;
+    total += d.total;
+  }
+  return { passed, total, unmeasured };
+}

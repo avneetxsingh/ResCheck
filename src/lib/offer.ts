@@ -69,7 +69,7 @@ export const GUARANTEES: Guarantee[] = [
   {
     name: "Derived, never invented.",
     body:
-      "Every number here is computed from your document and the posting you paste. Where something cannot be computed, we say so instead of guessing — that is why there is no overall score.",
+      "Every number here is computed from your document and the posting you paste. The headline figure is a count of the checks we actually ran — not a rating we invented — and the checks nobody could run are left out of it rather than counted against you. Where something cannot be computed, we say so instead of guessing.",
   },
   {
     name: "We never see your résumé twice.",

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { buildAtsDimensions, hasNoMeasurableDimension } from "@/lib/ats-dimensions";
+import {
+  buildAtsDimensions,
+  hasNoMeasurableDimension,
+  summariseChecks,
+} from "@/lib/ats-dimensions";
 import type { AnalysisResult, Skill, KnockoutCheck } from "@/types/analysis";
 
 function skill(name: string, present: boolean): Skill {
@@ -128,5 +132,36 @@ describe("buildAtsDimensions", () => {
   it("survives an entry with no funnel, skills or extraction", () => {
     const dims = buildAtsDimensions(makeResult());
     expect(hasNoMeasurableDimension(dims)).toBe(true);
+  });
+});
+
+describe("summariseChecks", () => {
+  const dims = [
+    { key: "a", label: "Searches", present: 9, total: 9, ratio: 1, detail: "" },
+    { key: "b", label: "Must-haves", present: 4, total: 6, ratio: 4 / 6, detail: "" },
+    { key: "c", label: "Nice-to-haves", present: null, total: null, ratio: null, detail: "" },
+  ];
+
+  it("sums the discrete checks that were actually run", () => {
+    const t = summariseChecks(dims);
+    expect(t.passed).toBe(13);
+    expect(t.total).toBe(15);
+  });
+
+  // An axis nobody could check must not count as a failure — that is the
+  // difference between this and the score sub-project C deleted.
+  it("excludes an unmeasurable axis from both sides and names it", () => {
+    const t = summariseChecks(dims);
+    expect(t.unmeasured).toEqual(["Nice-to-haves"]);
+    expect(t.total).toBe(15);
+  });
+
+  it("reports nothing measurable as a zero total rather than a zero score", () => {
+    const t = summariseChecks([
+      { key: "a", label: "Searches", present: null, total: null, ratio: null, detail: "" },
+    ]);
+    expect(t.total).toBe(0);
+    expect(t.passed).toBe(0);
+    expect(t.unmeasured).toEqual(["Searches"]);
   });
 });
