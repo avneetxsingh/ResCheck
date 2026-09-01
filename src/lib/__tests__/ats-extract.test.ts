@@ -55,6 +55,11 @@ describe("extractResumeStructure", () => {
     expect(s.contact.links.some((l) => l.includes("linkedin.com"))).toBe(true);
   });
 
+  it("keeps the opening parenthesis of an area code", () => {
+    const s = extractResumeStructure("Jane Doe\njane@example.com | (415) 555-0182\nEXPERIENCE\nEngineer at Acme");
+    expect(s.contact.phone).toBe("(415) 555-0182");
+  });
+
   it("does not mistake a date range for a phone number", () => {
     const s = extractResumeStructure("Jane Doe\nEXPERIENCE\nEngineer, 2019 - 2023");
     expect(s.contact.phone).toBeNull();

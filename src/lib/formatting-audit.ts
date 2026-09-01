@@ -22,6 +22,11 @@ function sectionLabel(block: ResumeSectionBlock): string {
   return block.heading !== "" ? block.heading : block.name[0].toUpperCase() + block.name.slice(1);
 }
 
+// Matches URLs, bare domains and email addresses so their lowercase spelling is
+// never read as a casing mistake.
+const URLISH_RE =
+  /(?:https?:\/\/|www\.)\S+|\S+@\S+|\b[A-Za-z0-9-]+\.(?:com|net|org|io|dev|me|co|ai|app|xyz)\b\S*/gi;
+
 // Safe list only — words that are never legitimately lowercase mid-resume.
 const PROPER_NOUNS: Record<string, string> = {
   javascript: "JavaScript",
@@ -92,10 +97,14 @@ export function runFormattingAudit(structured: StructuredResume): FormattingAudi
         if (m && !dateStyles.has(style)) dateStyles.set(style, m[0]);
       }
 
-      // Proper nouns — skip lines with URLs/emails to avoid flagging handles
-      if (!/https?:\/\/|www\.|@/.test(line)) {
+      // Proper nouns — blank out URLs, domains and handles first. A profile URL
+      // is correctly lowercase, so "github.com/jane" is not a casing defect;
+      // stripping the token rather than skipping the whole line keeps a genuine
+      // lowercase noun visible on a line that also carries a link.
+      {
+        const prose = line.replace(URLISH_RE, " ");
         for (const [lower, proper] of Object.entries(PROPER_NOUNS)) {
-          if (new RegExp(`(^|[^A-Za-z])${lower}([^A-Za-z]|$)`).test(line)) {
+          if (new RegExp(`(^|[^A-Za-z])${lower}([^A-Za-z]|$)`).test(prose)) {
             capitalization_issues.push(
               `[${label}] > lowercase proper noun: '${lower}' should be '${proper}'`
             );

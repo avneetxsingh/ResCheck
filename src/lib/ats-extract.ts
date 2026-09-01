@@ -42,14 +42,23 @@ function matchSectionHeading(line: string): ResumeSection | null {
 }
 
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
-const PHONE_CANDIDATE_RE = /\+?\d[\d\s().-]{7,}\d/g;
+// The optional leading paren matters: without it "(415) 555-0182" matches from
+// the digit and is reported as "415) 555-0182" — a mangled number shown to the
+// user as what the parser found.
+const PHONE_CANDIDATE_RE = /\+?\(?\d[\d\s().-]{7,}\d/g;
 const LINK_RE = /(https?:\/\/[^\s|,)]+|(?:www\.|linkedin\.com\/|github\.com\/)[^\s|,)]+)/gi;
 
 function findPhone(text: string): string | null {
   for (const m of text.match(PHONE_CANDIDATE_RE) ?? []) {
     const digits = m.replace(/\D/g, "");
     // Real phone numbers have 10-15 digits; date ranges ("2019 - 2023") have 8.
-    if (digits.length >= 10 && digits.length <= 15) return m.trim();
+    if (digits.length >= 10 && digits.length <= 15) {
+      const trimmed = m.trim();
+      // An opening paren the candidate never closes is punctuation we swept up.
+      return trimmed.startsWith("(") && !trimmed.includes(")")
+        ? trimmed.slice(1)
+        : trimmed;
+    }
   }
   return null;
 }

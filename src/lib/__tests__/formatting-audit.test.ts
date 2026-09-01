@@ -62,6 +62,17 @@ describe("runFormattingAudit", () => {
     expect(a.capitalization_issues).toEqual([]);
   });
 
+  it("does not flag a bare-domain profile URL on its own line", () => {
+    const a = audit("Jane\ngithub.com/jane\nSKILLS\nPython");
+    expect(a.capitalization_issues).toEqual([]);
+  });
+
+  it("still flags a real lowercase proper noun on a line that also holds a URL", () => {
+    const a = audit("Jane\nSKILLS\ngithub.com/jane and javascript experience");
+    expect(a.capitalization_issues.some((i) => i.includes("javascript"))).toBe(true);
+    expect(a.capitalization_issues.some((i) => i.includes("'github'"))).toBe(false);
+  });
+
   it("flags mixed heading casing styles", () => {
     const a = audit("Jane\nEXPERIENCE\nAcme engineer\nSkills\nPython");
     expect(a.capitalization_issues.some((i) => i.includes("EXPERIENCE") && i.includes("Skills"))).toBe(true);
