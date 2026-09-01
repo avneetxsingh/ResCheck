@@ -2,15 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { parsePdf } from "@/lib/pdf-parser";
 import { clientKey, parsePdfLimiter } from "@/lib/rate-limit";
 import type { ApiError } from "@/types/api";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/upload-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Under Vercel's ~4.5MB request-body ceiling on purpose: at 5MB the platform
-// rejects the upload with a raw 413 before this handler runs, so the user sees
-// a bare error instead of the sentence below. ResumeUploader enforces and
-// advertises the same number client-side — change all three together.
-const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4MB
+// The cap and the number in the message below come from one constant so they
+// cannot disagree; see upload-limit.ts for why that mattered.
 
 export async function POST(req: NextRequest) {
   // Before anything expensive: this route is unauthenticated and hands
@@ -59,9 +57,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (file.size > MAX_FILE_SIZE) {
+    if (file.size > MAX_UPLOAD_BYTES) {
       return NextResponse.json<ApiError>(
-        { error: "File too large. Maximum size is 5MB.", code: "PARSE_FAILED" },
+        {
+          error: `File too large. Maximum size is ${MAX_UPLOAD_MB} MB.`,
+          code: "PARSE_FAILED",
+        },
         { status: 413 }
       );
     }
