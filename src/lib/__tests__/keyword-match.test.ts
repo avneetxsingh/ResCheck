@@ -87,6 +87,19 @@ describe("extractBonusSkills", () => {
     expect(bonus).not.toContain("React");
   });
 
+  it("unpacks a parenthesised enumeration instead of splitting it open", () => {
+    const resume = "Jane Doe\nEXPERIENCE\nEngineer\nSKILLS\nCloud: AWS (EC2, S3, Lambda), Docker";
+    const bonus = extractBonusSkills(extractResumeStructure(resume), []);
+    expect(bonus).toContain("EC2");
+    expect(bonus).toContain("S3");
+    expect(bonus).toContain("Lambda");
+    expect(bonus).toContain("AWS");
+    expect(bonus).toContain("Docker");
+    // No entry may carry an unbalanced parenthesis: "AWS (EC2" and "Lambda)"
+    // were shown to the user verbatim as skill names.
+    expect(bonus.some((b) => b.includes("(") || b.includes(")"))).toBe(false);
+  });
+
   it("returns [] when there is no skills section", () => {
     const bonus = extractBonusSkills(extractResumeStructure("Jane\nEXPERIENCE\nEngineer"), []);
     expect(bonus).toEqual([]);

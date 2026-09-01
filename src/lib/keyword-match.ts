@@ -259,9 +259,16 @@ export function extractBonusSkills(structured: StructuredResume, jdSkillNames: s
   const seen = new Set<string>();
   const bonus: string[] = [];
 
+  // Parentheses become separators rather than surviving the comma split:
+  // "AWS (EC2, S3, Lambda)" otherwise breaks into "AWS (EC2" and "Lambda)",
+  // and those unbalanced fragments are shown to the user as skill names.
   const tokens = skillsSection.lines
     .flatMap((l) =>
-      l.replace(/^[•\-*–▪·]\s*/, "").replace(/^[A-Za-z &/]+:\s*/, "").split(/[,|;•]+/)
+      l
+        .replace(/^[•\-*–▪·]\s*/, "")
+        .replace(/^[A-Za-z &/]+:\s*/, "")
+        .replace(/[()]/g, ",")
+        .split(/[,|;•]+/)
     )
     .map((t) => t.trim())
     .filter((t) => t.length >= 2 && t.length <= 40);

@@ -80,7 +80,7 @@ export function InputRail({
             >
               Add your own API key
             </button>{" "}
-            for unlimited runs — it stays in your browser and never reaches our servers.
+            for unlimited runs — it is stored in your browser and never kept on our server.
           </AlertDescription>
         </Alert>
       )}
@@ -97,7 +97,7 @@ export function InputRail({
             >
               Add your own API key
             </button>{" "}
-            to run one — it stays in your browser.
+            to run one — it is stored in your browser and never kept on our server.
           </AlertDescription>
         </Alert>
       )}
