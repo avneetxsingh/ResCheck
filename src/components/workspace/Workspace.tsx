@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { History, Settings, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useHistory } from "@/hooks/useHistory";
@@ -88,7 +89,9 @@ export function Workspace() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-5xl">
+    // The composer stays a narrow focused column; the results dashboard needs
+    // the width its grid was drawn for.
+    <div className={cn("mx-auto w-full", shown || partial ? "max-w-7xl" : "max-w-5xl")}>
       <header className="flex items-center justify-between px-6 py-4 border-b border-border">
         <span className="font-mono text-sm font-semibold tracking-tight">ResCheck</span>
         <div className="flex items-center gap-1">
