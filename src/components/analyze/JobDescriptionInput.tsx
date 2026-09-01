@@ -23,7 +23,9 @@ export function JobDescriptionInput({ value, onChange }: JobDescriptionInputProp
 
   return (
     <div className="space-y-2">
-      <label htmlFor="jd-input" className="block text-sm font-medium text-foreground">
+      {/* The composer card already carries a visible "Job description" heading,
+          so this stays for screen readers rather than printing it twice. */}
+      <label htmlFor="jd-input" className="sr-only">
         Job description
       </label>
       <Textarea
