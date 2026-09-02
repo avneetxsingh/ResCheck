@@ -21,8 +21,8 @@ const SKILLS = [...SAMPLE_RESULT.skills_gap.must_have, ...SAMPLE_RESULT.skills_g
 const FOUND = SKILLS.filter((s) => s.present_in_resume).length;
 const MISSING = SKILLS.length - FOUND;
 
-const RETRIEVE = SAMPLE_RESULT.funnel!.retrieve;
-const PARSE = SAMPLE_RESULT.funnel!.parse;
+const RETRIEVE = SAMPLE_RESULT.funnel.retrieve;
+const PARSE = SAMPLE_RESULT.funnel.parse;
 
 const HIGHLIGHTS: { label: string; value: string; sub: string; tone: string }[] = [
   {

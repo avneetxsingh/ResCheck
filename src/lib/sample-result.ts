@@ -1,4 +1,12 @@
-import type { AnalysisResult } from "@/types/analysis";
+import type { AnalysisResult, AmbushKit, FunnelResult } from "@/types/analysis";
+
+/**
+ * The optional fields are non-optional *here*. Invariant 8 bans non-null
+ * assertions on `funnel` and `ambush_kit` because stored history entries can
+ * lack them — but this literal always carries both, and saying so in the type
+ * means no consumer has to assert it.
+ */
+type SampleResult = AnalysisResult & { funnel: FunnelResult; ambush_kit: AmbushKit };
 
 /**
  * One complete example report, so a visitor can see the payoff without
@@ -16,7 +24,7 @@ import type { AnalysisResult } from "@/types/analysis";
  * stale skill, two unevidenced ones, and a knockout that cannot be verified —
  * because a sample where everything passes would be its own kind of dishonesty.
  */
-export const SAMPLE_RESULT: AnalysisResult = {
+export const SAMPLE_RESULT: SampleResult = {
   scorecard: {
     grammar_score: {
       score: 88,

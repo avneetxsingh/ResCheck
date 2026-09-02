@@ -4,7 +4,7 @@ import { geminiProvider } from "./gemini";
 import { groqProvider } from "./groq";
 
 export type { Provider, ProviderId, ModelOption, Budgets, ProviderErrorKind } from "./types";
-import { DEFAULT_PROVIDER, PROVIDER_IDS, isProviderId } from "./catalog";
+import { isProviderId } from "./catalog";
 export { DEFAULT_PROVIDER, PROVIDER_IDS, isProviderId } from "./catalog";
 
 export const PROVIDERS: Record<ProviderId, Provider> = {
@@ -18,6 +18,3 @@ export function resolveProvider(id: unknown): Provider | null {
   return isProviderId(id) ? PROVIDERS[id] : null;
 }
 
-export function providerForModel(model: string): Provider | null {
-  return PROVIDER_IDS.map((id) => PROVIDERS[id]).find((p) => p.models.some((m) => m.id === model)) ?? null;
-}

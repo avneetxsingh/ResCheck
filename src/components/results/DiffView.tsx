@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import { diffWords } from "diff";
-import { cn } from "@/lib/utils";
 
 interface DiffViewProps {
   original: string;

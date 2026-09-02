@@ -5,7 +5,6 @@ import type { ParsePdfResponse } from "@/types/api";
 const require = createRequire(import.meta.url);
 // pdf-parse@1.1.1 is pure CJS — safe in Node.js API routes. It is not, however,
 // free of worker setup: see parseWithColdStartRetry below.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse = require("pdf-parse") as (
   buffer: Buffer,
   options?: { max?: number }

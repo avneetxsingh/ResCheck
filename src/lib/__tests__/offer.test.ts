@@ -141,12 +141,12 @@ describe("the sample report the landing page advertises", () => {
     // A sample where everything passes would be its own kind of dishonesty.
     expect(SAMPLE_RESULT.errors.length).toBeGreaterThan(0);
     expect(SAMPLE_RESULT.summary.top_improvements.length).toBeGreaterThan(0);
-    expect(SAMPLE_RESULT.ambush_kit!.questions.length).toBeGreaterThan(0);
+    expect(SAMPLE_RESULT.ambush_kit.questions.length).toBeGreaterThan(0);
     expect(SAMPLE_RESULT.summary.verdict).not.toBe("strong");
   });
 
   it("keeps an unverifiable knockout unverifiable", () => {
-    const checks = SAMPLE_RESULT.funnel!.knockout.checks;
+    const checks = SAMPLE_RESULT.funnel.knockout.checks;
     const auth = checks.find((c) => c.type === "work_authorization");
     expect(auth!.verdict).toBe("unverifiable");
   });
