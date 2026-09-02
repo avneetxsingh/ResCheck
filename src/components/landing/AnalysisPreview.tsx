@@ -126,14 +126,16 @@ export function AnalysisPreview() {
           </div>
 
           {open && (
-            <div id="sample-report" className="mt-6 border-t border-border pt-6">
-              <ResultsView
-                result={SAMPLE_RESULT}
-                partial={null}
-                onReset={() => setOpen(false)}
-                showActions={false}
-              />
-            </div>
+            <Reveal>
+              <div id="sample-report" className="mt-6 border-t border-border pt-6">
+                <ResultsView
+                  result={SAMPLE_RESULT}
+                  partial={null}
+                  onReset={() => setOpen(false)}
+                  showActions={false}
+                />
+              </div>
+            </Reveal>
           )}
         </div>
       </Reveal>

@@ -17,3 +17,32 @@
     transform: none;
   }
 }
+
+/* Route changes. app/template.tsx remounts on every navigation, so this runs
+   once per page rather than once per mount of a shared layout. The travel is
+   smaller than .reveal-item's (3px vs 6px) because a whole page sliding reads
+   as the app moving, where a section arriving reads as content settling.
+   Duration tokens collapse under reduced motion, so this ends in the same
+   final state with no perceptible travel. */
+.page-enter {
+  animation: page-enter var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Anchor navigation glides instead of jumping. This one needs its own guard:
+   scroll-behavior is not a duration, so the token collapse cannot reach it. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}

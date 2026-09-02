@@ -1,6 +1,14 @@
 "use client";
 
-import { AlertCircle, ArrowRight, Sparkles, Lock, Sigma, MonitorSmartphone } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowRight,
+  Sparkles,
+  Lock,
+  Sigma,
+  MonitorSmartphone,
+  Loader2,
+} from "lucide-react";
 import { Reveal } from "@/components/motion/Reveal";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -233,7 +241,10 @@ export function InputRail({
             className="group mx-auto flex h-12 w-full max-w-md rounded-xl text-base font-medium shadow-sm transition-[background-color,box-shadow] duration-[var(--dur-fast)] ease-[var(--ease-settle)] hover:shadow-md disabled:shadow-none"
           >
             {isRunning ? (
-              "Analysing…"
+              <>
+                <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden />
+                Analysing…
+              </>
             ) : (
               <>
                 <Sparkles className="mr-1.5 size-4" aria-hidden />
