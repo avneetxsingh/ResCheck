@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FREE_RUN_LIMIT } from "@/lib/free-run-limit";
@@ -52,6 +53,10 @@ export default function RootLayout({
         <ThemeProvider>
           <TooltipProvider>
             <main className="flex-1">{children}</main>
+            {/* Cookieless and anonymous — page counts only, no identifier, and
+                nothing from anyone's documents. The privacy section says so
+                out loud rather than letting the page imply zero telemetry. */}
+            <Analytics />
           </TooltipProvider>
         </ThemeProvider>
       </body>
