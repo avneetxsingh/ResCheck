@@ -5,6 +5,7 @@ import { History, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/telemetry";
 import { useSettings } from "@/hooks/useSettings";
 import { useAnalysis } from "@/hooks/useAnalysis";
 import { useHistory } from "@/hooks/useHistory";
@@ -124,7 +125,7 @@ export function Workspace() {
           jobDescription={jobDescription}
           onJobDescriptionChange={setJobDescription}
           file={file}
-          onFileAccepted={(f) => { setFile(f); setFileError(null); }}
+          onFileAccepted={(f) => { setFile(f); setFileError(null); trackEvent("resume_added"); }}
           onFileRejected={(reason) => { setFileError(reason); setFile(null); }}
           onClear={() => setFile(null)}
           fileError={fileError}

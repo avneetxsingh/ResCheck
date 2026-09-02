@@ -130,7 +130,7 @@ export const PRIVACY_FACTS: PrivacyFact[] = [
   },
   {
     name: "One cookie, no identity",
-    body: "A signed cookie counts how many free analyses you have spent, and anonymous page counts tell us whether the site works. Neither carries a name, an email, or anything from your documents.",
+    body: "A signed cookie counts how many free analyses you have spent, and anonymous counts of pages viewed and analyses run tell us whether the site works. Neither carries a name, an email, or anything from your documents.",
   },
 ];
 
@@ -148,7 +148,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Do you store my résumé?",
     answer:
-      "No. It is parsed in memory to build your report and never written to disk, and your history of past runs stays in your own browser. What is kept on our side is a signed cookie counting your free analyses, plus anonymous page counts — neither carries an identity, and neither contains anything from your documents.",
+      "No. It is parsed in memory to build your report and never written to disk, and your history of past runs stays in your own browser. What is kept on our side is a signed cookie counting your free analyses, plus anonymous counts of pages viewed and analyses run — neither carries an identity, and neither contains anything from your documents.",
   },
   {
     question: "Does a higher figure guarantee an interview?",

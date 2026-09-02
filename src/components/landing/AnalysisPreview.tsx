@@ -9,6 +9,7 @@ import { SAMPLE_RESULT } from "@/lib/sample-result";
 import { buildAtsDimensions, summariseChecks } from "@/lib/ats-dimensions";
 import { OUTCOMES, OFFER_ITEMS } from "@/lib/offer";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/telemetry";
 
 // Derived here, never typed: these are the same functions the product runs, so
 // the headline figures on this page are a property of SAMPLE_RESULT rather than
@@ -113,7 +114,12 @@ export function AnalysisPreview() {
               type="button"
               variant={open ? "outline" : "default"}
               className="group rounded-full px-5"
-              onClick={() => setOpen((v) => !v)}
+              onClick={() => {
+                setOpen((v) => {
+                  if (!v) trackEvent("sample_opened");
+                  return !v;
+                });
+              }}
               aria-expanded={open}
               aria-controls="sample-report"
             >

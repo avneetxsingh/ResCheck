@@ -6,6 +6,7 @@ import type { HistoryEntry } from "@/types/history";
 import type { ApiError, PartialAnalysis } from "@/types/api";
 import type { ProviderId } from "@/lib/providers/catalog";
 import { readFreeRunsUsedHint, writeFreeRunsUsedHint } from "@/lib/free-runs-storage";
+import { trackEvent } from "@/lib/telemetry";
 
 // Mirrors MAX_PAGES in src/lib/pdf-parser.ts, which is server-only
 // (createRequire) and so cannot be imported here. Change both together.
@@ -137,11 +138,17 @@ export function useAnalysis(
       setWarnings([]);
 
       const usingHosted = apiKey.trim().length === 0;
+      const mode = usingHosted ? "hosted" : "byok";
+      const startedAt = Date.now();
+      trackEvent("analysis_started", { mode });
       // Flips true only once the analyze response itself came back 200 — the
       // server writes its Set-Cookie (charging this run) before the SSE body
       // streams, so a pre-stream 400/403/503 never charged anything and must
       // never trigger a refund below.
       let chargedHostedRun = false;
+      // Set by whichever failure path fires first, so the telemetry below can
+      // say *why* a run failed without ever touching the error text.
+      let failureCode: string | undefined;
       // Declared outside the try block so the catch block below can still
       // read whatever the terminal error event set before the throw.
       let refundToken: string | undefined;
@@ -219,6 +226,7 @@ export function useAnalysis(
         // Pre-stream validation failures come back as plain JSON with a 4xx status
         if (!analyzeRes.ok) {
           const err: ApiError = await analyzeRes.json();
+          failureCode = err.code;
           throw new Error(err.error);
         }
         // A 200 here means the server already charged this run — anything
@@ -263,7 +271,8 @@ export function useAnalysis(
             } else if (evt.event === "result") {
               rawResult = (evt.data as { result?: unknown }).result ?? null;
             } else if (evt.event === "error") {
-              const d = evt.data as { error?: string; refund_token?: string };
+              const d = evt.data as { error?: string; refund_token?: string; code?: string };
+              failureCode = typeof d.code === "string" ? d.code : failureCode;
               streamError = typeof d.error === "string" ? d.error : "Analysis failed.";
               // Absent on non-hosted runs and on any run the server never
               // charged — optional by construction, never assumed present.
@@ -286,6 +295,10 @@ export function useAnalysis(
         setProgress(100);
         setResult(enriched);
         setStage("complete");
+        trackEvent("analysis_completed", {
+          mode,
+          seconds: Math.round((Date.now() - startedAt) / 1000),
+        });
 
         const entry: HistoryEntry = {
           id: `analysis-${Date.now()}`,
@@ -309,6 +322,13 @@ export function useAnalysis(
 
         setStage("error");
         setProgress(0);
+        // A category, never the message — messages quote provider text and can
+        // carry detail we have no business collecting.
+        trackEvent("analysis_failed", {
+          mode,
+          reason: failureCode ?? "unknown",
+          seconds: Math.round((Date.now() - startedAt) / 1000),
+        });
         setError(
           err instanceof Error ? err.message : "An unexpected error occurred."
         );
