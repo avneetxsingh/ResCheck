@@ -37,6 +37,12 @@ interface ResultsViewProps {
   // The two gates that are final as soon as AI-1 lands, ~18s before the rest.
   partial: PartialAnalysis | null;
   onReset: () => void;
+  /**
+   * The landing page renders this report as a sample. "Export PDF" and "New
+   * run" belong to a run the visitor started, and on a marketing page they
+   * offer to reset something that was never begun.
+   */
+  showActions?: boolean;
 }
 
 const VERDICT_CLASS: Record<string, string> = {
@@ -55,7 +61,7 @@ const VERDICT_LABEL: Record<string, string> = {
 
 type TabKey = "overview" | "ats" | "skills" | "writing" | "questions" | "sort" | "summary";
 
-export function ResultsView({ result, partial, onReset }: ResultsViewProps) {
+export function ResultsView({ result, partial, onReset, showActions = true }: ResultsViewProps) {
   // Hooks must run in the same order on every render, so these stay above the
   // legacy early return — switching between a pre-funnel and a funnel-shaped
   // past run reuses this same mounted component.
@@ -176,13 +182,15 @@ export function ResultsView({ result, partial, onReset }: ResultsViewProps) {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 lg:self-start">
-              {result && <ExportButton result={result} targetRef={printRef} />}
-              <Button variant="outline" size="sm" className="gap-2" onClick={onReset}>
-                <RotateCcw className="h-3.5 w-3.5" />
-                New run
-              </Button>
-            </div>
+            {showActions && (
+              <div className="flex items-center gap-2 lg:self-start">
+                {result && <ExportButton result={result} targetRef={printRef} />}
+                <Button variant="outline" size="sm" className="gap-2" onClick={onReset}>
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  New run
+                </Button>
+              </div>
+            )}
           </div>
         </section>
       </Reveal>

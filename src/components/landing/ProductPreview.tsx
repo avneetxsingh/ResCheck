@@ -83,9 +83,9 @@ export function ProductPreview() {
 
         <div className="rounded-lg border border-border px-4 py-3">
           <p className="text-xs font-medium">ATS dimensions</p>
-          {/* Bounded: at full card width the chart alone runs past 300px tall
-              and the preview towers over the copy beside it. */}
-          <div className="mx-auto mt-2 max-w-[300px]">
+          {/* Still bounded — an unbounded chart runs past 300px tall — but the
+              hero gives this figure the wider column now. */}
+          <div className="mx-auto mt-2 max-w-[420px]">
             <AtsDimensions dimensions={DIMENSIONS} />
           </div>
         </div>

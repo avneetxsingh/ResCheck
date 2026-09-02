@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils";
 // that it does not make things up.
 export function Hero() {
   return (
-    <section className="grid items-start gap-10 pt-10 pb-16 lg:grid-cols-2 lg:gap-12 lg:pt-16 lg:pb-20">
-      <div>
+    <section className="grid items-start gap-10 pt-10 pb-16 lg:grid-cols-12 lg:gap-10 lg:pt-16 lg:pb-24">
+      <div className="lg:col-span-5">
         <Reveal>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-accent px-3 py-1 text-xs text-accent-foreground">
             <Sparkles className="h-3 w-3" aria-hidden />
@@ -70,7 +70,7 @@ export function Hero() {
         </Reveal>
       </div>
 
-      <Reveal delay={120}>
+      <Reveal delay={120} className="lg:col-span-7">
         <ProductPreview />
       </Reveal>
     </section>

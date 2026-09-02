@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
 // promise a surface that does not exist.
 const LINKS = [
   { href: "#how-it-works", label: "How it works" },
-  { href: "#what-you-get", label: "What you get" },
-  { href: "#sample", label: "Sample report" },
+  { href: "#sample", label: "What you get" },
+  { href: "#privacy", label: "Privacy" },
+  { href: "#faq", label: "Questions" },
 ];
 
 export function LandingNav() {
