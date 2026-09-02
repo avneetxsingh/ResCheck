@@ -6,6 +6,13 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Tailwind's stock transition is 150ms ease-in-out. Pointing its defaults at
+     the motion tokens means every `transition-*` utility in the app settles on
+     the same curve as the arrival animations, rather than two motion systems
+     running side by side. Reduced motion collapses --dur-fast to 1ms, so these
+     go instant with everything else and no utility needs a variant. */
+  --default-transition-duration: var(--dur-fast);
+  --default-transition-timing-function: var(--ease-out);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans-loaded);
