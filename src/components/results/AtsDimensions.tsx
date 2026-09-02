@@ -69,7 +69,11 @@ export function AtsDimensions({ dimensions }: AtsDimensionsProps) {
   if (complete && segments.length === 1) segments[0] = [...segments[0], segments[0][0]];
 
   return (
-    <div className="flex flex-col gap-3">
+    // A container query, not a viewport one: this chart is rendered both in a
+    // full-width results card and in the landing page's narrow preview, and a
+    // viewport breakpoint keeps two legend columns in a 300px box, which
+    // truncates every label.
+    <div className="@container flex flex-col gap-3">
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="w-full"
@@ -171,7 +175,7 @@ export function AtsDimensions({ dimensions }: AtsDimensionsProps) {
       </svg>
 
       {/* The table view the chart is read against — raw counts, never a percentage. */}
-      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 @xs:grid-cols-2">
         {dimensions.map((d, i) => (
           <div
             key={d.key}

@@ -24,7 +24,7 @@ const TONE: Record<SampleRow["tone"], string> = {
 
 export function FirstScreenSample() {
   return (
-    <section className="py-16 border-t border-border">
+    <section id="sample" className="scroll-mt-8 border-t border-border py-16">
       <Reveal>
         <h2 className="text-2xl font-semibold tracking-tight">The First Screen</h2>
         <p className="mt-2 max-w-prose text-muted-foreground">
