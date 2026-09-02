@@ -356,7 +356,7 @@ export async function POST(req: NextRequest) {
     if (state.exhausted) {
       return NextResponse.json<ApiError>(
         {
-          error: `You've used your ${FREE_RUN_LIMIT} free analyses. Add your own API key in Settings for unlimited runs — it never leaves your browser.`,
+          error: `You've used your ${FREE_RUN_LIMIT} free analyses. Add your own API key in Settings for unlimited runs — it is stored in your browser and never kept on our server.`,
           code: "FREE_RUNS_EXHAUSTED",
         },
         { status: 403 }
