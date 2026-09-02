@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useTheme } from "next-themes";
-import { History, Settings, Sun, Moon } from "lucide-react";
+import { useState } from "react";
+import { History, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
 import { useAnalysis } from "@/hooks/useAnalysis";
@@ -52,12 +52,6 @@ export function Workspace() {
   const [railOpen, setRailOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  // The theme toggle lived in Navbar, which Task 7 deletes. It is the only
-  // toggle in the app, so the workspace header must carry it or the user is
-  // stranded in whatever theme they last had.
-  const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
   const isRunning = stage === "parsing" || stage === "analyzing";
   // Matches useAnalysis's own definition of "has a key" exactly. A length
@@ -95,16 +89,7 @@ export function Workspace() {
       <header className="flex items-center justify-between px-6 py-4 border-b border-border">
         <span className="font-mono text-sm font-semibold tracking-tight">ResCheck</span>
         <div className="flex items-center gap-1">
-          {mounted && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-              aria-label="Toggle theme"
-            >
-              {resolvedTheme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </Button>
-          )}
+          <ThemeToggle />
           <Button
             variant="ghost"
             size="icon"

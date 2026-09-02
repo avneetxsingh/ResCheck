@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTheme } from "next-themes";
 import { Eye, EyeOff, ExternalLink, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,12 @@ interface SettingsDialogProps {
   defaults: AppSettings;
 }
 
+const THEMES = [
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+  { id: "system", label: "System" },
+] as const;
+
 export function SettingsDialog({
   open, onOpenChange, settings, saveSettings, hydrated, defaults,
 }: SettingsDialogProps) {
@@ -28,6 +35,14 @@ export function SettingsDialog({
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
   const [showKey, setShowKey] = useState(false);
+
+  // Theme applies on click rather than on Save: it is a display preference, not
+  // part of the settings payload, and next-themes persists it itself. The
+  // mounted flag keeps the selected state from rendering before hydration
+  // resolves which theme is actually in force.
+  const { theme, setTheme } = useTheme();
+  const [themeReady, setThemeReady] = useState(false);
+  useEffect(() => setThemeReady(true), []);
 
   // Local state persists between opens because the dialog never unmounts, so
   // a cancelled edit would still be sitting there on the next open — and
@@ -148,6 +163,34 @@ export function SettingsDialog({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+              Appearance
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTheme(t.id)}
+                  aria-pressed={themeReady && theme === t.id}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-center transition-colors",
+                    themeReady && theme === t.id
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:bg-muted/40"
+                  )}
+                >
+                  <span className="font-mono text-sm">{t.label}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Applies immediately and is remembered in this browser. System follows your
+              device.
+            </p>
           </div>
         </div>
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 // Anchors only. There is no Pricing link because there is no pricing beyond the
@@ -29,9 +30,12 @@ export function LandingNav() {
         ))}
       </nav>
 
-      <Link href="/check" className={cn(buttonVariants({ size: "sm" }), "rounded-full px-4")}>
-        Check a résumé
-      </Link>
+      <div className="flex items-center gap-1">
+        <ThemeToggle />
+        <Link href="/check" className={cn(buttonVariants({ size: "sm" }), "rounded-full px-4")}>
+          Check a résumé
+        </Link>
+      </div>
     </header>
   );
 }
